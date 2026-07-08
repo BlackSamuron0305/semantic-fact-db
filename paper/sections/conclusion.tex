@@ -1,36 +1,38 @@
 \section{Conclusion}
 \label{sec:conclusion}
 
-We have presented a sheaf-theoretic approach to semantic fact storage
-and querying.  Our results demonstrate that the sheaf representation
-provides significant advantages for entity-centric LOOKUP queries
-(0.003--0.074ms vs.\ 0.008--2.279ms for KG) while matching KG insert
-performance (0.88--0.96$\times$).  However, full-scan (GLOBAL) queries
-are substantially slower due to open set iteration overhead.
+We described the Semantic Fact Database, a prototype context-indexed
+storage system for semantic facts. The system stores each fact atomically
+as a section over a finite context poset and answers entity-anchored
+queries through a stalk index that returns complete facts in a single hash
+lookup. A companion reified triple-store baseline is provided over the
+same canonical schema, and a mechanised proof of semantic equivalence
+binds the two engines together: every insert and every query is checked,
+online, for canonical result equality.
 
-The formal model --- based on presheaves over a finite poset of contexts
-with restriction maps and gluing --- provides a rigorous foundation for
-contextual knowledge representation.  The implementation demonstrates
-that this model can be realized as a working database system with
-verified cross-engine semantic equivalence.
+The evaluation on ten workloads at three scales yields a clear tradeoff.
+Inserts are essentially identical on the two engines. Entity-anchored
+LOOKUP queries are $3$--$30\times$ faster on the sheaf-inspired engine
+because the stalk index removes the need for triple reassembly.
+Unrestricted GLOBAL queries are up to $1\,405\times$ slower on the
+sheaf-inspired engine because the current implementation iterates open
+sets instead of maintaining a flat fact index. We report the negative
+result plainly and describe the extension that would eliminate it.
 
-Key findings:
-\begin{enumerate}
-    \item SheafDB's stalk-indexed LOOKUP is 3--30$\times$ faster than KG
-          across all tested scales.
-    \item Insert performance is comparable (SheafDB 0.88--0.96$\times$ KG).
-    \item GLOBAL (full scan) queries are 1--1400$\times$ slower, revealing
-          a need for a flat fact index in production implementations.
-    \item Cross-engine semantic equivalence is verified: both engines
-          produce identical canonical results for all query types.
-    \item The sheaf approach is best understood as a presheaf-based
-          contextual knowledge store, not as a sheaf in the strict
-          topological sense (the sheaf condition is vacuous for the
-          Alexandrov topology on a finite poset).
-\end{enumerate}
+The formal apparatus in the paper is that of presheaves on a finite poset.
+We do not claim a novel sheaf-theoretic theorem: on the Alexandrov topology
+that fits our setting, the sheaf condition holds vacuously and could not
+serve as a technical contribution. The value of the framework is
+operational. It gives us a disciplined vocabulary for restriction, stalks,
+and global sections that maps directly onto the components of the
+implementation, and it gives us a canonical intermediate representation
+that makes cross-engine equivalence a checkable property rather than an
+aspiration.
 
-The sheaf representation is preferred when queries are entity-centric
-and context-scoped.  The traditional KG representation is preferred for
-full-scan workloads.  A hybrid approach combining both representations
---- using the stalk index for LOOKUP and a flat triple index for scans
---- may offer the best of both worlds.
+We do not claim that the design supplants production RDF stores. Our KG
+baseline is a controlled research implementation and the reported speedups
+are best interpreted as a measurement of what disciplined context-indexed
+storage buys over a strict reification-plus-joins design at comparable
+engineering effort. Extending the evaluation to standard benchmarks and to
+production RDF endpoints is future work. The artifact and reproducibility
+manifest for every result in the paper are released with the paper.

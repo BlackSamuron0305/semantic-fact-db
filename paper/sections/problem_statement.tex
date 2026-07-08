@@ -1,39 +1,56 @@
 \section{Problem Statement}
 \label{sec:problem}
 
-\subsection{Informal Description}
+We formalise the storage and query problem that both engines are required to
+solve. The formalism is deliberately compact: it names only the objects that
+appear in the implementation and in the equivalence proof.
+
+\subsection{Informal Statement}
 \label{sec:problem:informal}
 
-We have a collection of semantic facts. Each fact describes a relationship
-between entities within a specific context. Facts are organized by context,
-and contexts form a hierarchy from general to specific. The system must
-support:
+The system is given a finite stream of semantic facts. Each fact is a tuple
+of arguments together with a context of validity. The system must accept
+inserts, answer queries that either fix a context or range freely, and expose
+a canonical view against which any concrete storage engine can be checked for
+semantic equivalence.
 
-\begin{enumerate}
-    \item Storing facts and retrieving them by their properties and context.
-    \item Answering queries that may span multiple contexts.
-    \item Reconstructing global facts from local observations.
-    \item Ensuring semantic equivalence regardless of how facts are stored.
-\end{enumerate}
-
-\subsection{Formal Description}
+\subsection{Formal Statement}
 \label{sec:problem:formal}
 
-Let $\mathcal{F}$ be the set of all possible semantic facts (Definition~\ref{def:semanticfact}),
-$\mathcal{C}$ a finite poset of contexts, and $Q$ a query language over $\mathcal{F}$.
+Let $\mathcal{F}$ denote the set of well-formed semantic facts, with fields
+$(\mathrm{id}, s, r, \vec{o}, c, k, m)$ as defined in
+Definition~\ref{def:semanticfact}. Let $(\mathcal{C}, \leq)$ be the finite
+context poset defined in Definition~\ref{def:context}, and let $\mathcal{Q}$
+be the query language of Section~\ref{sec:arch:query}. A \emph{storage
+engine} is a data structure $\Sigma$ that maintains an internal representation
+of a finite set $F \subseteq \mathcal{F}$ and exposes the following
+operations:
 
-\textbf{Storage problem:} Given a finite set $F \subseteq \mathcal{F}$,
-construct a data structure $\Sigma(F)$ supporting:
-\begin{enumerate}
-    \item $\textsc{Insert}(f)$: add $f$ to $\Sigma$.
-    \item $\textsc{Query}(Q)$: return $\{f \in \Sigma \mid f \text{ matches } Q\}$.
-    \item $\textsc{Glue}()$: reconstruct global sections from local ones.
-\end{enumerate}
+\begin{description}
+    \item[$\textsc{Insert}(f)$] adds $f$ to $F$.
+    \item[$\textsc{Query}(Q)$] returns the set of facts in $F$ that match
+          $Q$, under the denotational semantics of Section~\ref{sec:arch:query}.
+    \item[$\textsc{Glue}()$] returns the global sections of $F$: the maximal
+          collection of facts whose local sections are pairwise compatible
+          on their common context overlaps.
+\end{description}
 
-\textbf{Equivalence problem:} For two data structures $\Sigma_1, \Sigma_2$
-built from the same $F$, ensure
-$\llbracket Q \rrbracket_{\Sigma_1} \cong \llbracket Q \rrbracket_{\Sigma_2}$
-for all $Q \in \mathcal{L}(Q)$.
+Two storage engines $\Sigma_1$ and $\Sigma_2$ over the same $F$ are
+\emph{semantically equivalent} if
+\[
+    \llbracket Q \rrbracket_{\Sigma_1} \;\cong\; \llbracket Q \rrbracket_{\Sigma_2}
+    \qquad \text{for every } Q \in \mathcal{Q},
+\]
+where $\cong$ denotes equality of the associated canonical result sets in
+the sense of Definition~\ref{def:semanticequiv}.
 
-\textbf{Optimization problem:} Minimize query latency $t(Q, \Sigma)$
-subject to storage constraints, for expected query distributions.
+\subsection{What We Actually Prove and Measure}
+\label{sec:problem:scope}
+
+The equivalence claim above is proved constructively in
+Section~\ref{sec:correctness} through a canonical intermediate representation
+and checked at every insert and every query by the shared verification
+harness. The performance claim---that a context-indexed engine can answer
+entity-centric lookups faster than a reified triple store while paying an
+open-set enumeration cost on unrestricted scans---is measured empirically in
+Section~\ref{sec:evaluation}.

@@ -1,17 +1,21 @@
 \section{Artifact Availability}
 \label{sec:artifact}
 
-The complete source code, data, and experimental results are available at:
+The complete source code, datasets, benchmark harness, and reproducibility
+manifests are released under the MIT License at:
 {\small \url{https://github.com/BlackSamuron0305/semantic-fact-db}}
 
-\subsection{Reproducibility}
+\subsection{Reproducing the Results}
 \label{sec:artifact:reproducibility}
 
-The following information is automatically recorded for reproducibility:
+Every benchmark run records a reproducibility manifest that identifies the
+git commit, Python interpreter version, \texttt{uv.lock} hash, dataset
+checksum, and random seed used to produce it. Table~\ref{tab:reproducibility}
+lists the values used for the run reported in this paper.
 
 \begin{table}[ht]
 \centering
-\caption{Reproducibility metadata.}
+\caption{Reproducibility metadata for the reported run.}
 \label{tab:reproducibility}
 \begin{tabular}{@{}ll@{}}
 \toprule
@@ -27,7 +31,20 @@ Generation date & \texttt{\generationdate} \\
 \end{tabular}
 \end{table}
 
+To reproduce the reported numbers from a clean clone:
+
+\begin{verbatim}
+git clone https://github.com/BlackSamuron0305/semantic-fact-db
+cd semantic-fact-db
+uv sync --group dev
+uv run pytest                          # 347 tests should pass
+uv run sfdb benchmark --size medium    # populates results/
+uv run python scripts/generate_paper.py
+cd paper && make                       # produces main.pdf
+\end{verbatim}
+
 \subsection{License}
 \label{sec:artifact:license}
 
-This work is released under the MIT License.
+Source code, data generators, and benchmark harnesses are released under
+the MIT License.

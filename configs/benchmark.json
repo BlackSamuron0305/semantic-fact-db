@@ -19,6 +19,12 @@
             "max_arity": 5,
             "context_depth": 3,
             "seed": 42
+        },
+        {
+            "name": "lubm_1",
+            "type": "lubm",
+            "num_universities": 1,
+            "seed": 42
         }
     ],
     "queries": [

@@ -1,40 +1,68 @@
 \section{Related Work}
 \label{sec:related-work}
 
-The Semantic Web vision~\cite{bernerslee2001semantic} popularised the use of
-knowledge graphs for representing structured information on the web.
-RDF~\cite{manola2004rdf} and SPARQL~\cite{sparql2013} form the backbone
-of this ecosystem, enabling interlinked data across domains.
-Property graphs~\cite{angles2017property} extend this model with
-edge properties and multiple edge types, as implemented by
-Neo4j~\cite{neotechnology2024neo4j}, Amazon Neptune, and ArangoDB.
+Our work sits at the intersection of three research traditions. This section
+places it relative to each of them and states, plainly, what we do and do not
+adopt from the mathematical vocabulary we borrow.
 
-Despite their widespread adoption, graph-based representations face
-fundamental limitations when handling $n$-ary relations. Reification---the
-standard technique for representing $n$-ary facts in RDF---introduces
-intermediate nodes and increases the join complexity of queries by a
-factor of $O(k)$ for a $k$-ary fact~\cite{angles2008survey}.
+\paragraph{Knowledge graphs and semantic stores.}
+The RDF triple model~\cite{manola2004rdf} and its query language
+SPARQL~\cite{sparql2013} form the backbone of the modern semantic web. Production
+triple stores---Apache Jena, Virtuoso, GraphDB, Blazegraph---have evolved highly
+tuned index structures (SPO, POS, OSP, and permutations), custom storage
+formats, and cost-based query optimisers for the reified triple representation.
+Named graphs~\cite{carroll2005named} extend the triple with a fourth graph
+coordinate and are the standard mechanism for scoping. Property
+graphs~\cite{angles2017property}, as implemented in Neo4j and Amazon Neptune,
+decorate edges with attribute maps, which handles some higher-arity cases
+gracefully but reintroduces the reification problem for facts of arity above
+two or three.
 
-Alternative mathematical frameworks have been proposed to address these
-limitations. Category theory provides a natural language for describing
-structural relationships~\cite{maclane1992sheaves}. Sheaf theory, in
-particular, has been applied to distributed
-computing, database
-theory~\cite{patterson2022sheaf}, and data
-fusion~\cite{robinson2020sheaf}. Hypergraphs~\cite{gallo1993hypergraph}
-and simplicial complexes~\cite{edelsbrunner2010computational} offer
-alternative models for higher-order relationships.
+The reification cost of representing $n$-ary facts in triples is well
+documented~\cite{angles2008survey}. It is $O(k)$ triples and $O(k)$ joins per
+fact of arity $k$. Various mitigations exist---SPARQL 1.1's property paths,
+star-schema optimisations, RDF-star for statement-level annotation---but the
+underlying atomicity mismatch remains: the storage unit is smaller than the
+semantic unit. Our KG baseline implements the standard reified approach with
+SPO/POS/OSP indexes and dictionary encoding. We do not claim this baseline is
+state of the art; it is a controlled reference point.
 
-Formal Concept Analysis (FCA)~\cite{ganter1999formal} provides a lattice-theoretic
-approach to knowledge representation that shares structural similarities
-with our context poset. However, FCA does not provide the restriction maps
-or gluing operations that are central to sheaf theory.
+\paragraph{Categorical and topological database models.}
+The categorical database
+literature~\cite{patterson2022sheaf,spivak2012functorial} recasts schemas as
+categories and instances as functors. Sheaf structures have been used for
+distributed sensor fusion~\cite{robinson2020sheaf} and for reasoning about
+locally consistent but globally inconsistent data collections. Simplicial
+complexes and cellular sheaves have been proposed as data models for
+higher-order relationships~\cite{edelsbrunner2010computational}. Formal Concept
+Analysis~\cite{ganter1999formal} organises data around a lattice of concepts
+that shares surface structural features with our context poset, but does not
+include the restriction maps or stalks that our design uses operationally.
 
-Topological Data Analysis (TDA)~\cite{carlsson2009topology} applies
-algebraic topology to data analysis. While TDA focuses on extracting
-topological features from point clouds, we apply topological structures
-as a native data model rather than an analytical tool.
+We borrow terminology and structural intuition from this literature, but
+we are not proving a theorem about sheaves. As we make explicit throughout, the
+sheaf condition is vacuous on the finite Alexandrov topology that fits our
+use case, so anything the model buys us empirically is buying it because of
+the presheaf structure and the choice of indexing, not because of the sheaf
+axioms.
 
-To the best of our knowledge, no prior work has proposed a complete
-sheaf-based database system for semantic facts with an implementation,
-benchmark evaluation, and formal correctness proofs against a KG baseline.
+\paragraph{Context and provenance in semantic data.}
+Contexts, named graphs, and provenance annotations have received sustained
+attention in the semantic web community~\cite{carroll2005named}. Approaches
+range from explicit named graphs, to context-carrying quads, to reified
+provenance ontologies such as PROV-O. Our contribution is neither a new
+context ontology nor a new provenance model; we adopt a straightforward
+dot-separated hierarchy of contexts as our first-class organising principle and
+show what a database built around it looks like when the mathematical structure
+is taken seriously.
+
+\paragraph{Positioning.}
+To the best of our knowledge, no prior system provides all of the following
+together: a context-indexed semantic fact storage engine with stalk-based
+LOOKUP, a co-implemented reified triple-store baseline, a canonical
+intermediate representation with a mechanised proof of semantic equivalence
+between the two, and a benchmark evaluation that reports both wins and losses
+across a LOOKUP/GLOBAL taxonomy. The individual ingredients are all standard,
+in some cases decades old. What this paper contributes is a coherent design
+that combines them and an honest evaluation of what the combination is and is
+not worth.

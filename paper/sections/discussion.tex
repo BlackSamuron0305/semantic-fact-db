@@ -1,75 +1,113 @@
 \section{Discussion}
 \label{sec:discussion}
 
-\subsection{Interpretation of Results}
+\subsection{What the Results Do and Do Not Show}
 \label{sec:discussion:interpretation}
 
-The experimental results reveal a nuanced picture.  SheafDB's
-stalk-indexed LOOKUP is orders of magnitude faster than KG's
-triple reconstruction, confirming that context-indexed section
-storage avoids join overhead for entity-centric queries.
-However, SheafDB's GLOBAL (full scan) performance is significantly
-worse because the current implementation iterates over all open
-sets rather than maintaining a flat fact index.
+The measurements in Section~\ref{sec:evaluation} tell a two-sided story.
+Where the query anchors an entity and the engine can answer it through
+a single hash lookup into the stalk index, SFDB is between $3\times$ and
+$30\times$ faster than a reified triple store on comparable hardware and at
+comparable engineering effort. Where the query has no anchor and the engine
+must produce every fact in the store, SFDB is up to three orders of magnitude
+\emph{slower} than the KG baseline because it enumerates open sets rather
+than a flat table. These two facts are not in tension: they are two sides of
+the same decision. Once one commits to indexing by context, one must decide
+what to do when a query does not use that index. The current implementation
+does the naive thing; the remedy is straightforward and outlined below.
 
-This tradeoff is inherent to the sheaf representation: organizing
-facts by context enables fast local queries but adds overhead for
-global operations.  The paper's contribution is the approach itself
---- a mathematically rigorous framework for contextual knowledge
-representation --- not a claim of universal performance superiority.
+We do not claim, and the data do not support, that the sheaf-inspired
+approach dominates a mature RDF store on every workload at every scale. Our
+KG baseline is a research prototype implemented by the same team as the
+sheaf engine and running against the same test harness, storage backend,
+and canonicalisation pipeline. It is a controlled reference, not a
+state-of-the-art. Any claim about how SFDB would fare against Jena TDB2 or
+Virtuoso must wait for a comparable evaluation, which we identify as future
+work.
 
-\subsection{When SheafDB Excels}
+\subsection{When the Design Helps}
 \label{sec:discussion:sheaf-wins}
 
-SheafDB is preferred when:
-\begin{itemize}
-    \item Queries are entity-centric LOOKUPs, where the stalk index
-          provides O(1) retrieval vs.\ KG's O(k) triple reconstruction.
-    \item Facts have high arity ($k \geq 4$), where reification overhead
-          becomes significant.
-    \item Context-scoped queries benefit from restriction-map locality.
-    \item Cross-engine verification is required for data integrity.
-\end{itemize}
+The context-indexed design helps when the workload has any of the
+following properties. First, entity-anchored LOOKUP dominates the query mix:
+each such query is answered in $O(1)$ hash lookups rather than
+$O(k)$ triple joins. Second, facts have arity above two or three: reification
+overhead grows linearly with arity in the KG baseline, while the SFDB engine
+stores each fact atomically. Third, queries scope naturally to sub-trees of
+the context poset: the open-set index turns such scoping into an index seek
+rather than a filter over a triple stream. Fourth, the application requires
+verifiable data integrity across representations: the canonical layer and
+cross-engine verification harness make it cheap to run the same fact
+stream through both engines and catch inconsistencies.
 
-\subsection{When KG Excels}
+\subsection{When the KG Baseline Helps}
 \label{sec:discussion:kg-wins}
 
-The KG representation is preferred when:
-\begin{itemize}
-    \item Full scans (GLOBAL queries) are the primary workload.
-    \item The dataset is flat (single context), providing no locality benefit.
-    \item Integration with existing RDF/SPARQL infrastructure is required.
-\end{itemize}
+The reified triple representation wins in the workloads that the SFDB
+design was not built for. Unrestricted GLOBAL scans that must touch every
+fact are one such case: a flat triple table is the natural structure for
+that access pattern, and the current SFDB implementation pays a substantial
+penalty. Workloads that are essentially binary---where facts genuinely are
+subject-predicate-object triples with no context, no arity, and no
+provenance---get no benefit from the sheaf structure and only pay the
+overhead of maintaining the extra indexes. Finally, integration with the
+extensive existing RDF and SPARQL tooling ecosystem is currently only
+possible on the KG side.
 
 \subsection{Threats to Validity}
 \label{sec:discussion:threats}
 
-\begin{itemize}
-    \item \textbf{Implementation bias}: Both engines were implemented by the
-          same authors.  The KG baseline may not reflect the performance of
-          mature systems like Jena or Virtuoso.
-    \item \textbf{Dataset bias}: Synthetic datasets may not capture all
-          characteristics of real-world knowledge graphs.
-    \item \textbf{Query bias}: The benchmark query set may favor one
-          representation over another.
-    \item \textbf{Scale}: Results at 10K facts are indicative but do not
-          demonstrate production-scale behavior.  Standard RDF benchmarks
-          (LUBM, BSBM) start at 100K triples.
-\end{itemize}
+We identify four threats that a careful reader should weigh.
+
+\begin{description}
+    \item[Implementation bias.] Both engines were written by the same
+          authors, and both share code paths (serialisation,
+          canonicalisation, planner infrastructure). A production RDF store
+          would likely improve on our KG numbers by a substantial factor,
+          particularly on the LOOKUP queries where our baseline pays the
+          largest overhead. The relative advantage of SFDB on LOOKUP is
+          therefore an upper bound on the advantage one would observe
+          against a state-of-the-art baseline.
+
+    \item[Dataset bias.] We use synthetic datasets whose arity, context
+          depth, and entity distribution we control. Real knowledge graphs
+          have long tails, correlated structure, and adversarial cases that
+          our generator does not model. Repeating the evaluation on
+          LUBM~\cite{guo2005lubm} and DBpedia is the natural next step.
+
+    \item[Query bias.] Our query set was designed with both engines in
+          mind. It includes queries where each engine is expected to do
+          well and where each is expected to struggle. A different query
+          mix would shift the aggregate numbers, but the qualitative
+          story---stalk indexing helps LOOKUP, open-set iteration hurts
+          GLOBAL---would not change without a design change.
+
+    \item[Scale.] All measurements are at $10^4$ facts or below. Standard
+          RDF benchmarks start at $10^5$ triples. Our design choices are
+          consistent with the complexity analysis in Section~\ref{sec:complexity},
+          but empirically our claims are bounded at $10^4$.
+\end{description}
 
 \subsection{Negative Results}
 \label{sec:discussion:negative}
 
-SheafDB's GLOBAL query performance degrades significantly with dataset
-size (1405$\times$ slower than KG at 10K facts).  This is because the
-current implementation iterates over all open sets to collect unique
-facts, rather than maintaining a flat fact index.  A production-quality
-implementation would add a global fact index to bypass open set
-iteration for full scans.
+Two negative results deserve to be stated plainly, because they discipline
+the paper's overall claim.
 
-The sheaf condition (locality + gluing) is mathematically vacuous for
-the Alexandrov topology on a finite poset, where every presheaf is
-automatically a sheaf.  The system is more accurately described as a
-presheaf database with optional consistency verification.  The value
-lies in the context-indexed organization and cross-engine verification,
-not in the sheaf condition itself.
+The first is the GLOBAL scan penalty of up to $1\,405\times$ at $10\,000$
+facts. It arises from an implementation choice (open-set enumeration
+instead of a flat fact index) and is not intrinsic to the sheaf-inspired
+design. Section~\ref{sec:future:global-index} sketches a fix. Until that fix
+lands, SFDB is not an appropriate choice for workloads dominated by
+unrestricted scans.
+
+The second is the vacuousness of the sheaf condition in our setting. On a
+finite poset with the Alexandrov topology, every presheaf is automatically a
+sheaf; locality and gluing hold because the covers under consideration are
+trivial. The system is, strictly, a presheaf database with a defensive
+consistency check. This does not diminish the practical value of the design:
+what makes the design work is the context poset, the stalk index, the
+canonical intermediate representation, and the disciplined restriction
+vocabulary that comes with them. It does mean that any framing of the paper
+as a sheaf-theoretic breakthrough would be dishonest, and we do not adopt
+that framing.

@@ -1,11 +1,12 @@
-% Experimental Setup — auto-generated from benchmark outputs
+% Experimental Setup — verified benchmark configuration
 \section{Experimental Setup}
 \label{sec:experimental-setup}
 
-We evaluate Semantic Fact DB against three baselines:
-KnowledgeGraph (native triple store),
-SheafDatabase (sheaf-theoretic representation),
-and Apache Jena TDB2 (standard RDF store).
+We evaluate Semantic Fact DB against two baselines:
+KnowledgeGraph (our RDF-inspired triple store baseline) and
+SheafDatabase (the sheaf-based representation).
+Apache Jena TDB2 integration is in progress; the adapter
+scaffold is in \texttt{src/sfdb/benchmark/engine\_adapter.py}.
 
 \subsection{Hardware}
 All experiments run on a single machine with an
@@ -17,38 +18,22 @@ of RAM, running
 
 \subsection{Implementation}
 Semantic Fact DB is implemented in Python 3.14.
-The optimizer applies cost-based rewriting using
-predicate pushdown, constant folding, and
-dead-operator elimination.
 Both the KG and Sheaf backends share the same
-parser, logical plan representation, and optimizer.
+parser, logical plan representation, and canonical model.
 
 \subsection{Datasets}
-We use five datasets:
-(1) Synthetic graphs with controlled size and arity,
-(2) LUBM (Lehigh University Benchmark),
-(3) DBpedia subset,
-(4) YAGO subset,
-(5) Wikidata subset.
-Table~\ref{tab:datasets} summarizes their statistics.
-
-\input{tables/dataset_stats.tex}
+We use synthetic datasets with controlled size, arity, and context depth,
+generated with seed 42 for reproducibility.
+LUBM integration is in progress; real-world dataset
+evaluation is left as future work.
 
 \subsection{Query Workloads}
-Table~\ref{tab:workloads} lists the fifteen benchmark queries.
-Queries Q1--Q4 test basic graph traversal,
-Q5--Q7 test semantic filtering,
-Q8 tests aggregation,
-Q9--Q10 test mixed and global reconstruction,
-Q11--Q13 test mutations,
-and Q14--Q15 test I/O throughput.
-
-\input{tables/workloads.tex}
+We evaluate two query types: LOOKUP (entity-centric retrieval via
+subject identifier) and GLOBAL (full scan of all facts).
+These correspond to the C1--C10 workload taxonomy described in
+Section~\ref{sec:contextual-workloads}.
 
 \subsection{Metrics}
-For each query we measure:
-latency (ms), memory (RSS bytes), CPU utilization,
-and cache hit rate.
-All metrics report mean, median, P95,
-and 95\% confidence intervals over
-10 (cold) or 50 (warm) runs.
+For each query we measure latency (ms).
+All metrics report the mean over 10 warm-cache runs
+after 2 warm-up iterations.

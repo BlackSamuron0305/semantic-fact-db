@@ -1,39 +1,54 @@
 \section{Limitations}
 \label{sec:limitations}
 
-\subsection{Scalability Limits}
+We describe the design's limitations honestly and in one place so that a
+reader can weigh what the paper does and does not claim.
+
+\subsection{Scale and Deployment}
 \label{sec:limits:scalability}
 
-The current implementation is single-node and in-memory.
-Global section computation requires $O(|\mathcal{C}| \cdot N^2)$ time in
-the worst case, which limits scalability to datasets where $|\mathcal{C}|$
-and $N$ are moderate (on the order of $10^4$ facts).  All results in this paper were obtained at scales up to 10,000 facts.  Behaviour at larger scales is extrapolated from complexity analysis and is the subject of ongoing work.
+The current prototype is single-node and in-memory. All measurements are at
+scales of $10\,000$ facts or below; behaviour at larger scales is
+extrapolated from the complexity analysis of Section~\ref{sec:complexity}
+and not directly measured. Global-section computation in the worst case is
+$O(|\mathcal{C}| \cdot N^2)$, which imposes a natural ceiling on the size
+of context poset that the system can support on a single node. Distributing
+the store across nodes would require a partitioning strategy for the
+context poset and a distributed restriction-map protocol; both are outside
+the scope of this paper.
 
 \subsection{Mathematical Assumptions}
 \label{sec:limits:math}
 
-The sheaf model assumes that the context poset is finite and has the
-Alexandrov topology. This is appropriate for our setting but may not
-generalize to infinite or continuous context spaces. The gluing condition
-assumes compatible sections can always be identified, which may fail in
-the presence of contradictory information.
+The formal model assumes a finite context poset equipped with the
+Alexandrov topology. This is the right setting for the intended workload,
+but it is also the setting in which the sheaf condition holds vacuously.
+Nothing in the paper claims a non-trivial sheaf theorem. The gluing
+operation in the implementation is a defensive consistency check rather
+than a step in a proof; in the presence of genuinely contradictory local
+data (which our schema currently forbids), the algorithm would report the
+conflict rather than resolve it.
 
 \subsection{Implementation Limitations}
 \label{sec:limits:implementation}
 
-The current prototype does not support:
-\begin{itemize}
-    \item Concurrent access or transactions.
-    \item Persistent storage (in-memory only).
-    \item Distributed execution.
-    \item Streaming or incremental fact ingestion.
-    \item Full SPARQL compliance (custom query language).
-\end{itemize}
+The prototype does not currently support concurrent transactions, on-disk
+persistence beyond the built-in SQLite backing store, distributed
+execution, streaming or incremental fact ingestion, or full SPARQL
+compliance. The query language is a small subset of SPARQL together with a
+few sheaf-native operations. Full SPARQL support and a proper transactional
+layer are engineering work that would be needed for any real deployment
+but that would not change the paper's structural findings.
 
-\subsection{Benchmark Limitations}
+\subsection{Baseline and Benchmark Limitations}
 \label{sec:limits:benchmark}
 
-The benchmark suite covers 15 query types. While representative, this is
-not exhaustive. Real-world workloads may exhibit different access patterns.
-The synthetic datasets, while controlled, may not capture all nuances of
-organic knowledge graph data.
+The KG baseline is a research prototype implemented by the same team as
+the sheaf engine. It is a controlled reference point, not a
+state-of-the-art RDF store. The evaluation therefore quantifies what
+disciplined context-indexed storage buys over a strict reification-plus-joins
+implementation at comparable engineering effort. Repeating the evaluation
+against a production RDF store on a standard benchmark such as
+LUBM~\cite{guo2005lubm}, BSBM, or WatDiv is the natural next step and is
+called out as future work. The synthetic datasets, while parameterised,
+may not exhibit all pathologies of organic knowledge graph data.

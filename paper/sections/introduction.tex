@@ -1,55 +1,119 @@
-Knowledge graphs represent semantic information as collections of triples
-$(s, p, o)$. While effective for binary relations, this representation
-requires decomposition of $n$-ary events into multiple triples via
-reification~\cite{manola2004rdf}. This decomposition increases query
-complexity, storage requirements, and the number of joins needed for
-reconstruction.
+\section{Introduction}
+\label{sec:introduction}
 
-We propose an alternative representation based on sheaf
-theory~\cite{maclane1992sheaves}, where semantic facts
-are modeled as sections over a partially ordered set of contexts, and
-queries are answered through restriction maps rather than graph traversal.
+Knowledge graphs have become the default representation for semantic
+information on the web and in enterprise systems. Their foundations are simple:
+every fact is a triple $(s, p, o)$ that asserts a binary relationship
+between a subject, a predicate, and an object~\cite{manola2004rdf,sparql2013}. The
+model is uniform, transparent, and has an enormous accumulated tooling base. It
+is also a poor fit for large classes of real data.
 
-\subsection{Research Questions}
-\label{sec:research-questions}
+Two mismatches recur across domains. First, many facts are not binary. A drug
+interaction record carries a drug, a target, a dosage, a route, a study population,
+and a confidence interval, all in one statement. A financial transaction pairs
+a buyer, a seller, an instrument, a price, a currency, a venue, and a
+timestamp. Encoding such facts as triples requires \emph{reification}: an
+auxiliary event node is minted, each attribute becomes its own triple pointing
+at that node, and reconstructing the original fact costs one join per attribute.
+Second, the same fact often holds in some contexts and not in others. A
+biological interaction that is valid \emph{in vitro} may fail \emph{in vivo};
+a corporate policy that applies in the European subsidiary may not apply in
+North America. Context is not first-class in the triple model. It is added
+either through separate named graphs~\cite{carroll2005named}, through further
+reification, or through ad-hoc conventions in the predicate URI.
 
-\begin{enumerate}
-    \item Can sheaf theory provide a mathematically rigorous foundation
-          for semantic fact storage and retrieval?
-    \item Does a sheaf-based representation reduce query complexity for
-          contextual queries compared to traditional KGs?
-    \item Under what conditions does each representation outperform the other?
-    \item Can we prove semantic equivalence between the two representations?
-\end{enumerate}
+Both problems have well-known workarounds, and mature triple stores handle
+them competently at scale. The question we pose in this paper is whether there
+is anything to gain from a database whose primary organising principle is not
+the triple but the \emph{context}. Concretely, we ask whether one can build a
+storage engine that (i)~stores each fact as an atomic record, without
+reification, and (ii)~indexes those records by the context poset in a way that
+answers entity-centric queries in one hash lookup while remaining verifiably
+equivalent to a conventional RDF-style store on the queries that both engines
+can answer.
 
-\subsection{Contributions}
+The mathematical vocabulary that fits this question naturally is that of
+presheaves on a poset of contexts. A presheaf assigns a set of local
+sections---in our setting, facts---to each context, and equips the assignment
+with restriction maps that specialise a fact from a broader context to a
+narrower one. A sheaf is a presheaf that satisfies two additional axioms of
+locality and gluing. We stress at the outset that on a finite poset endowed
+with the Alexandrov topology, these axioms hold vacuously. The system we describe
+is therefore a \emph{presheaf-based} database in the strict technical sense; the
+sheaf terminology is retained because the operational vocabulary of restriction,
+stalks, and global sections is what our implementation actually exposes, not
+because we claim a non-trivial sheaf-theoretic theorem.
+
+\subsection*{Contributions}
 \label{sec:contributions}
 
+The contributions of this paper are, in order:
+
 \begin{enumerate}
-    \item A formal mathematical model of semantic facts as sections of a
-          sheaf over a finite topological space (Section~\ref{sec:mathematical_model}).
-    \item A complete implementation of both a KG baseline and a sheaf database
-          with a common canonical interface (Section~\ref{sec:implementation}).
-    \item A proof of semantic equivalence via a canonical intermediate
-          representation (Section~\ref{sec:correctness}).
-    \item A benchmark evaluation identifying a fundamental representation
-          tradeoff: SheafDB achieves 3--30$\times$ LOOKUP speedup via
-          stalk-indexed retrieval but incurs up to 1405$\times$ overhead on
-          full-scan (GLOBAL) queries due to open-set iteration
-          (Section~\ref{sec:evaluation}).
-    \item Theoretical complexity analysis identifying the regimes where
-          each representation is preferred (Section~\ref{sec:complexity}).
+    \item A concise formal model of a context-indexed semantic fact store,
+          expressed in the language of presheaves on a finite poset
+          (Section~\ref{sec:mathematical_model}). The model is deliberately
+          minimal: it names only the structure that the implementation uses.
+
+    \item A prototype implementation, the \emph{Semantic Fact Database}
+          (SFDB), that realises the model in roughly $15\,000$ lines of
+          Python (Section~\ref{sec:implementation}). Two storage engines are
+          provided over a shared canonical schema: a reference triple store
+          with SPO/POS/OSP indexes and reification for $n$-ary facts, and a
+          sheaf-inspired engine with a stalk index, a restriction cache, and
+          an on-demand global-section constructor.
+
+    \item A canonical intermediate representation together with a
+          bidirectional mapping to and from each engine's native format,
+          used to establish semantic equivalence at every insert and every
+          query (Section~\ref{sec:correctness}). Cross-engine equivalence is
+          enforced by the test suite ($347$ passing tests) and re-checked
+          on every benchmark run.
+
+    \item A benchmark evaluation across ten workloads at three scales,
+          organised into three query classes (LOOKUP, GLOBAL, TEMPORAL) and
+          insert throughput (Section~\ref{sec:evaluation}). We identify a
+          clear tradeoff: the sheaf-inspired engine is $3$--$30\times$ faster
+          than the KG baseline on LOOKUP queries and matches it on inserts,
+          but is up to $1405\times$ slower on unrestricted GLOBAL scans at
+          $10^4$ facts because it iterates open sets rather than a flat fact
+          index. We report the negative result plainly and describe the
+          straightforward extension that would eliminate it.
+
+    \item A discussion of the design's realistic scope, including the
+          honest observation that the sheaf condition is vacuous in our
+          setting and therefore not the source of any of the performance
+          differences we observe (Section~\ref{sec:discussion}). The
+          practical value of the model lies in the context poset, the
+          stalk index, and the canonical mapping, not in the sheaf axioms.
 \end{enumerate}
 
-\subsection{Paper Organization}
+\subsection*{What This Paper Is Not}
+
+We do not claim that a sheaf-inspired database replaces production RDF
+stores such as Apache Jena, GraphDB, or Virtuoso. Our KG baseline is a
+research prototype implemented by the same authors as the SFDB engine, and
+we call attention to this limitation throughout: the LOOKUP speedups we
+report are best interpreted as measurements of what disciplined
+context-indexed storage buys over a strict reification-plus-joins design at
+comparable engineering quality, not as claims about the state of the art in
+RDF engines. We do not report results on standard benchmarks such as LUBM,
+BSBM, or WatDiv; extending the evaluation in that direction is future work.
+We do not claim novelty in category theory. The formal machinery we use is
+standard.
+
+\subsection*{Paper Organisation}
 \label{sec:organization}
 
-Section~\ref{sec:related-work} discusses related work.
-Section~\ref{sec:background} provides mathematical background.
-Section~\ref{sec:mathematical_model} presents the formal model.
-Section~\ref{sec:system-architecture} describes the system architecture.
-Section~\ref{sec:implementation} details the implementation.
-Section~\ref{sec:experimental-setup} describes the experimental design.
-Section~\ref{sec:evaluation} presents results.
-Section~\ref{sec:discussion} interprets findings.
-Section~\ref{sec:conclusion} concludes and discusses future work.
+Section~\ref{sec:related-work} places the work relative to existing knowledge
+graph and category-theoretic database literature. Section~\ref{sec:background}
+recalls the finite mathematical background we rely on. Section~\ref{sec:problem}
+states the storage and equivalence problems formally.
+Section~\ref{sec:mathematical_model} presents the formal model; the appendix
+contains the definitions, lemmas, and proofs that back it.
+Section~\ref{sec:system-architecture} describes the system architecture, and
+Section~\ref{sec:implementation} the implementation. Section~\ref{sec:evaluation}
+reports the benchmark results, organised by query class.
+Section~\ref{sec:discussion} interprets the results, and
+Section~\ref{sec:limitations} states the limitations. Section~\ref{sec:future}
+outlines future work, and Section~\ref{sec:conclusion} concludes.

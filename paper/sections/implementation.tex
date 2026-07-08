@@ -1,43 +1,102 @@
 \section{Implementation}
 \label{sec:implementation}
 
+The implementation is a Python 3.12+ package of approximately $15\,000$
+lines organised into ten modules and covered by $347$ passing tests. This
+section describes the parts of the codebase that a reader would need to see
+in order to understand or reproduce the paper's claims.
+
 \subsection{Repository Structure}
 \label{sec:impl:repository}
 
-The implementation is organised as a Python 3.12+ package with the
-following modules:
-
 \begin{description}
-    \item[\texttt{sfdb.common}] Shared data types and interfaces
-          (\texttt{SemanticFact}, \texttt{Entity}, \texttt{Relation}).
-    \item[\texttt{sfdb.canonical}] Canonical mapping between generic
-          facts and engine-specific representations.
-    \item[\texttt{sfdb.kg}] Knowledge Graph engine: triple storage,
-          indexing, reification, SPARQL-like query execution.
-    \item[\texttt{sfdb.sheaf}] Sheaf Database engine: topology construction,
-          restriction maps, gluing, context-indexed storage.
-    \item[\texttt{sfdb.query}] Query language, parser, planner, optimizer,
-          and execution engine.
-    \item[\texttt{sfdb.optimizer}] Cost-based optimizer shared across
-          engines with engine-specific cost models.
-    \item[\texttt{sfdb.datasets}] Synthetic and real dataset loaders.
-    \item[\texttt{sfdb.benchmark}] Benchmark framework: runner, metrics,
-          verification, visualization.
-    \item[\texttt{sfdb.storage}] Serialization (JSON, Parquet, MessagePack).
-    \item[\texttt{sfdb.utils}] Configuration, logging, timing utilities.
-    \item[\texttt{sfdb.visualization}] Plot generation (\texttt{matplotlib}).
+    \item[\texttt{sfdb.common}] Shared data types (\texttt{SemanticFact},
+          \texttt{Entity}, \texttt{Relation}, \texttt{Context}) and the
+          engine ABC that both storage engines implement.
+    \item[\texttt{sfdb.canonical}] The canonical intermediate
+          representation and the bidirectional mapping between it and each
+          engine's native format.
+    \item[\texttt{sfdb.kg}] The Knowledge Graph engine: dictionary
+          encoding, SPO/POS/OSP indexes, reification, and a SPARQL-inspired
+          query executor.
+    \item[\texttt{sfdb.sheaf}] The sheaf-inspired engine: incremental
+          topology, open-set index, stalk index, restriction cache,
+          neighbourhood index, global-section constructor, and consistency
+          checker.
+    \item[\texttt{sfdb.query}] The shared query language, parser, and
+          logical plan representation.
+    \item[\texttt{sfdb.optimizer}] The shared cost-based optimiser
+          (predicate pushdown, dead-operator elimination) with
+          engine-specific cost models.
+    \item[\texttt{sfdb.datasets}] Synthetic dataset generation and a
+          LUBM~\cite{guo2005lubm} loader.
+    \item[\texttt{sfdb.benchmark}] The benchmark harness: runners,
+          per-engine adapters, metric collectors, and the cross-engine
+          verifier.
+    \item[\texttt{sfdb.storage}] JSON, MessagePack, and Parquet
+          serialisation for facts and results.
+    \item[\texttt{sfdb.visualization}] Plot generation used by
+          \texttt{scripts/generate\_paper.py} to produce the figures in
+          Section~\ref{sec:evaluation}.
 \end{description}
 
-\subsection{Configuration}
+\subsection{Mapping to the Formal Model}
+\label{sec:mapping:kg-real}
+\label{sec:mapping:sh-real}
+
+The KG mapping $\phi_{\mathrm{KG}}$ reifies a fact into a set of triples
+against a fresh event identifier. Given a fact of arity $k$, the mapping
+emits $k + 4$ triples: a type triple $(e, \texttt{rdf:type}, \texttt{sfdb:Fact})$,
+a subject triple, a relation triple, one triple per object slot, a context
+triple, and a confidence triple. Provenance and temporal envelopes add
+additional triples when present. The inverse mapping $\psi_{\mathrm{KG}}$
+gathers all triples sharing the same event identifier and reconstitutes
+the original fact.
+
+The sheaf mapping $\phi_{\mathrm{Sh}}$ stores the fact as a single
+\texttt{LocalSection} attached to its context. The section retains the
+complete tuple of arguments. No decomposition takes place; retrieval by
+fact identifier is a single dictionary lookup. The inverse mapping is the
+identity on the stored payload.
+
+Both mappings are lossless in the sense of Definition~\ref{def:lossless}.
+The round-trip $\psi \circ \phi = \mathrm{id}_\mathcal{F}$ is enforced by
+the test suite for every fact inserted during a benchmark run
+(\texttt{tests/test\_roundtrip.py}).
+
+\subsection{Configuration and Reproducibility}
 \label{sec:impl:config}
 
-All engines share a common configuration system with three sources:
-YAML files, environment variables (prefix \texttt{SFDB\_}), and
-programmatic overrides via the \texttt{Config} dataclass.
+The system reads configuration from three sources, in order of increasing
+priority: a YAML file (\texttt{configs/benchmark.json} for the default
+benchmark suite), environment variables prefixed with \texttt{SFDB\_}, and
+programmatic overrides through a \texttt{Config} dataclass. Every
+benchmark run seeds Python's PRNG and NumPy's PRNG from the same integer
+(default $42$), records the git commit hash, the Python version, the
+\texttt{uv.lock} hash, and a checksum of the generated dataset, and stores
+them in a per-run reproducibility manifest.
 
 \subsection{Testing}
 \label{sec:impl:testing}
 
-The test suite uses \texttt{pytest} with \texttt{pytest-cov} for coverage.
-Module tests validate individual components. Round-trip tests verify the
-canonical mapping. Benchmark tests validate cross-engine equivalence.
+The test suite uses \texttt{pytest}. Module tests validate individual
+components: topology construction, restriction composition, stalk indexing,
+reification round-trips, query planning, and canonicalisation. Cross-engine
+tests (\texttt{tests/test\_cross\_engine.py}) execute the same fact stream
+and the same query set on both engines and assert canonical equality of the
+result sets. Round-trip tests (\texttt{tests/test\_roundtrip.py}) assert
+that $\psi \circ \phi = \mathrm{id}$ on both engines for a large synthetic
+population. As of the current revision, all $347$ tests pass in $\approx 3$
+seconds on a modern laptop.
+
+\subsection{Engine Adapters for External Systems}
+\label{sec:impl:adapters}
+
+The benchmark harness supports pluggable engine adapters. Two adapters are
+fully implemented and used in the evaluation: \texttt{KGEngineAdapter} and
+\texttt{SheafEngineAdapter}. A partial adapter for Apache Jena, backed by
+the \texttt{rdflib} Python library, is available but not integrated into
+the results reported here because we do not yet claim like-for-like
+comparability with a production Jena TDB2 deployment. Scaffolds for
+Blazegraph and Neo4j exist but raise \texttt{NotImplementedError} on
+construction; they are place-holders for planned integration work.

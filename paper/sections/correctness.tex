@@ -1,117 +1,111 @@
 \section{Correctness}
 \label{sec:correctness}
 
-A knowledge state $\Sigma$ is \emph{correct} if its observable behaviour matches
-the formal specification. Concretely:
-\begin{enumerate}
-    \item Every query result $\llbracket Q \rrbracket_\Sigma$ contains exactly
-          the facts satisfying $Q$ according to denotational semantics.
-    \item State transitions preserve the invariants of the semantic fact model.
-    \item The sheaf axioms (locality and gluing) are satisfied at all times.
-    \item Two storage engines produce equivalent results for identical inputs.
-\end{enumerate}
+We now state the equivalence claim that binds the two storage engines to
+the same canonical semantics. The claim is constructive: we exhibit
+bidirectional mappings between each engine's native format and a canonical
+intermediate representation, and we show that every operation exposed by the
+engines commutes with those mappings up to canonical equality.
 
-\subsection{Lossless Mapping}
+\subsection{Canonical Fact and Canonical Result}
+\label{sec:correctness:canonical}
+
+Let $\mathfrak{F}$ denote the type of \emph{canonical facts}: a canonical fact
+is a semantic fact whose fields have been normalised (identifiers sorted,
+object tuples canonicalised, metadata keys ordered) so that two facts are
+canonically equal exactly when they carry the same semantic content.
+Concretely, the canonical form drops implementation-specific artefacts such
+as the choice of reification event identifier or the internal storage order
+of the sheaf sections. For a query $Q$ and a storage engine $\Sigma$, the
+canonical result $\mathfrak{R}_\Sigma(Q)$ is the set of canonical facts
+obtained by canonicalising each fact in $\llbracket Q \rrbracket_\Sigma$.
+
+\subsection{Lossless Mapping to Each Engine}
 \label{sec:correctness:lossless}
 
 \begin{definition}[Lossless Mapping]
 \label{def:lossless}
-A mapping $\phi: \mathcal{F}_A \to \mathcal{F}_B$ is \emph{lossless} iff there
-exists a reverse mapping $\psi: \mathcal{F}_B \to \mathcal{F}_A$ such that
-$\psi(\phi(f)) = f$ for all $f \in \mathcal{F}_A$.
+A mapping $\phi: \mathcal{F} \to \mathcal{S}$ into an engine-specific
+representation $\mathcal{S}$ is \emph{lossless} if there exists a reverse
+mapping $\psi: \mathcal{S} \to \mathcal{F}$ with $\psi \circ \phi = \mathrm{id}_\mathcal{F}$.
 \end{definition}
 
-Three mappings are required:
+The implementation provides two such maps:
 \begin{itemize}
-    \item $\phi_{\mathrm{KG}}$: generic fact $\to$ KG triple representation (reification).
-    \item $\phi_{\mathrm{Sheaf}}$: generic fact $\to$ sheaf section.
-    \item $\phi_{\mathrm{Canonical}}$: generic fact $\to$ canonical fact.
+    \item $\phi_{\mathrm{KG}}: \mathcal{F} \to \mathcal{T}$ reifies a fact
+          into a set of typed triples over an auxiliary event node
+          (Section~\ref{sec:mapping:kg-real});
+    \item $\phi_{\mathrm{Sh}}: \mathcal{F} \to \mathcal{S}_{\mathrm{Sh}}$
+          stores a fact as a local section attached to its context
+          (Section~\ref{sec:mapping:sh-real}).
 \end{itemize}
+Both maps have inverses $\psi_{\mathrm{KG}}$ and $\psi_{\mathrm{Sh}}$ that
+reconstruct the original fact bit-for-bit; the round-trip is checked by the
+test suite for every fact inserted during a benchmark run.
 
-All three must be lossless and their compositions must commute:
-\[
-\phi_{\mathrm{Canonical}} \circ \psi_{\mathrm{KG}} \circ \phi_{\mathrm{KG}}
-= \phi_{\mathrm{Canonical}}
-= \phi_{\mathrm{Canonical}} \circ \psi_{\mathrm{Sheaf}} \circ \phi_{\mathrm{Sheaf}}.
-\]
-
-\subsection{Semantic Equivalence}
+\subsection{Semantic Equivalence of Query Results}
 \label{sec:correctness:equivalence}
 
 \begin{definition}[Semantic Equivalence]
 \label{def:semanticequiv}
-Two knowledge states $\Sigma_1$ and $\Sigma_2$ are \emph{semantically equivalent}
-iff they produce isomorphic canonical models:
-\[
-\mathfrak{F}(\Sigma_1) \cong \mathfrak{F}(\Sigma_2)
-\]
-where $\cong$ denotes equality up to identifier bijection preserving all
-semantic relationships.
+Two storage engines $\Sigma_1, \Sigma_2$ built from the same finite fact set
+$F$ are \emph{semantically equivalent} if for every query $Q \in \mathcal{Q}$
+we have $\mathfrak{R}_{\Sigma_1}(Q) = \mathfrak{R}_{\Sigma_2}(Q)$.
 \end{definition}
 
-For any sequence of insert operations applied identically to both KG and Sheaf:
-\[
-\mathfrak{F}(\Sigma_{\mathrm{KG}}) \cong \mathfrak{F}(\Sigma_{\mathrm{Sheaf}}).
-\]
+\begin{theorem}[Cross-Engine Equivalence]
+\label{thm:equivalence}
+The KG and SFDB engines built from the same finite $F \subseteq \mathcal{F}$
+are semantically equivalent.
+\end{theorem}
 
-\subsection{Referential Integrity}
+\begin{proof}[Proof sketch]
+Let $\pi: \mathcal{F} \to \mathfrak{F}$ denote canonicalisation. It suffices
+to show that $\pi \circ \psi_{\mathrm{KG}} \circ \phi_{\mathrm{KG}} = \pi$ and
+$\pi \circ \psi_{\mathrm{Sh}} \circ \phi_{\mathrm{Sh}} = \pi$ on
+$\mathcal{F}$, and that both engines evaluate every query $Q$ by scanning
+their respective representations of $F$ and returning
+$\{\psi(x) \mid x \in \Sigma, x \models Q\}$. The first two identities follow
+from losslessness (Definition~\ref{def:lossless}), and the second is the
+correctness property of the two query evaluators. Composing the two identities
+with $\pi$ on either side gives
+$\mathfrak{R}_{\Sigma_{\mathrm{KG}}}(Q) = \mathfrak{R}_{\Sigma_{\mathrm{Sh}}}(Q)$
+for every $Q$.
+\end{proof}
+
+The theorem is not merely stated but enforced operationally: the benchmark
+runner instantiates both engines from the same fact stream, executes every
+query on both, canonicalises the results, and refuses to record any latency
+number for a query whose two engines produced differing canonical result
+sets. Every benchmark row reported in Section~\ref{sec:evaluation} has passed
+this check.
+
+\subsection{Referential and Consistency Invariants}
 \label{sec:correctness:integrity}
 
 \begin{definition}[Referential Integrity]
 \label{def:refintegrity}
-$\Sigma$ satisfies \emph{referential integrity} iff for every fact $f \in \Sigma$:
-\begin{enumerate}
-    \item $\operatorname{subject}(f) \in \mathcal{E}_\Sigma$ (subject exists).
-    \item If object $\omega_j$ is a reference (not a literal), $\omega_j \in \mathcal{E}_\Sigma$.
-    \item $\operatorname{relation}(f) \in \mathcal{R}_\Sigma$ (relation type exists).
-\end{enumerate}
+A storage engine $\Sigma$ satisfies \emph{referential integrity} if, for
+every fact $f = (\mathrm{id}, s, r, \vec{o}, c, k, m) \in \Sigma$, the subject
+$s$ is a known entity in $\Sigma$, every non-literal object $\omega_j \in \vec{o}$
+is a known entity in $\Sigma$, and the relation $r$ is a known relation in
+$\Sigma$.
 \end{definition}
 
-\subsection{Consistency (Sheaf Axioms)}
-\label{sec:correctness:consistency}
+Both engines maintain the invariant on insert and check it as part of the
+verification harness.
 
-\begin{definition}[Consistent Knowledge State]
+\begin{definition}[Consistency]
 \label{def:consistency}
-A knowledge state $\Sigma$ with presheaf $F$ is \emph{consistent} iff $F$
-satisfies the sheaf axioms of locality (Definition~\ref{thm:locality})
-and gluing (Definition~\ref{thm:gluing}).
+A storage engine is \emph{consistent} if every pair of overlapping sections
+agrees under restriction to their common sub-context. Formally, for every
+$c, d \in \mathcal{C}$ and every $f \in F(c)$, $g \in F(d)$ such that
+$\pi(f) = \pi(g)$ on the intersection $c \wedge d$, we have
+$\rho_{c, c \wedge d}(f) = \rho_{d, c \wedge d}(g)$.
 \end{definition}
 
-After every state transition, the gluing check verifies that no pair of sections
-in overlapping contexts disagree. A \texttt{ConsistencyError} is raised when
-incompatible sections are detected.
-
-\subsection{Determinism}
-\label{sec:correctness:determinism}
-
-\begin{definition}[Deterministic Query Execution]
-\label{def:determinism}
-Query execution is \emph{deterministic} iff the same query $Q$ against the
-same knowledge state $\Sigma$ always returns the same result
-$\llbracket Q \rrbracket_\Sigma$, independent of execution order, caching,
-parallelism, or query history:
-\[
-\operatorname{ExecuteQuery}(Q, \Sigma) = \operatorname{ExecuteQuery}(Q, \Sigma)
-\]
-for any two invocations with identical arguments.
-\end{definition}
-
-\subsection{Summary}
-\label{sec:correctness:summary}
-
-\begin{table}[ht]
-\centering
-\caption{Correctness conditions summary.}
-\label{tab:correctness}
-\begin{tabular}{@{}lll@{}}
-\toprule
-Condition & Formal Criterion & Failure Consequence \\
-\midrule
-Lossless Mapping & $\psi(\phi(f)) = f$ & Data loss \\
-Semantic Equivalence & $\mathfrak{F}(\Sigma_1) \cong \mathfrak{F}(\Sigma_2)$ & Incorrect results \\
-Referential Integrity & $\forall f: \operatorname{refs}(f) \subseteq \mathcal{E}_\Sigma$ & Orphan references \\
-Consistency (Sheaf) & Locality + Gluing & Contradictory knowledge \\
-Determinism & $Q(\Sigma) = Q(\Sigma)$ & Non-reproducible results \\
-\bottomrule
-\end{tabular}
-\end{table}
+As noted in Section~\ref{sec:sheaf-remark}, on the finite Alexandrov topology
+this condition is vacuous: the intersection $c \wedge d$ always exists in the
+poset, restriction maps are total functions, and the check reduces to a
+tautology. The consistency checker in the implementation therefore serves as
+a defensive assertion rather than as a non-trivial theorem-proving procedure.

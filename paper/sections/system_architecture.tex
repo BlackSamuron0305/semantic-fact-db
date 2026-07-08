@@ -1,5 +1,108 @@
 \section{System Architecture}
 \label{sec:system-architecture}
 
-\input{sections/architecture.tex}
-\input{sections/system_design.tex}
+The Semantic Fact Database is organised as two independent storage engines
+sharing a single canonical schema, a common query interface, and a
+verification harness. Figure~\ref{fig:architecture} shows the top-level
+layout.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.85\textwidth]{figures/architecture.pdf}
+\caption{Top-level architecture. Applications interact with a single
+\texttt{DatabaseEngine} interface. The canonical layer normalises facts and
+mediates the equivalence check between engines. Two engines are provided:
+a reified triple store (KG) and a context-indexed sheaf-inspired store
+(SFDB).}
+\label{fig:architecture}
+\end{figure}
+
+\subsection{The Canonical Schema}
+\label{sec:arch:schema}
+
+Both engines are built on top of the same \texttt{SemanticFact} record,
+whose fields are the fact identifier, subject entity, relation, ordered
+tuple of object values, context of validity, confidence, an optional
+temporal envelope, and an optional provenance record. Facts are immutable.
+Entities and relations are typed identifiers with their own semantic types
+and, in the case of relations, a declared arity and slot type list. The
+context is a dot-separated hierarchical path (for example,
+\texttt{world.clinical.adult}) that names a node in the finite context
+poset $(\mathcal{C}, \leq)$.
+
+Every field of \texttt{SemanticFact} corresponds to a first-class concept in
+the formal model: the tuple of object values is a section over the fact's
+context, the context is a point in the poset, and the canonicalisation of the
+fact identifier is what makes semantic equivalence between engines a
+well-defined comparison.
+
+\subsection{The Knowledge Graph Engine}
+\label{sec:arch:kg}
+
+The KG engine implements a compact RDF-style triple store. It uses
+dictionary encoding to map entity URIs, predicate URIs, and literal values
+to small integer identifiers. Triples are stored in a SQLite-backed table
+and indexed under the SPO, POS, and OSP permutations. $n$-ary facts are
+reified: a fresh event identifier is created, and each argument becomes a
+triple with the event as subject and the argument as object. Reconstructing a
+$k$-ary fact from its triples requires $k$ joins on the event identifier.
+The engine exposes both a native \texttt{Query} interface and a
+SPARQL-inspired parser that translates a limited subset of SPARQL patterns
+into logical plans.
+
+The KG engine is the paper's baseline. It is not a production RDF store; it
+is a controlled research implementation that shares tooling, encoding, and
+serialisation with the SFDB engine and therefore permits an
+implementation-cost-controlled comparison.
+
+\subsection{The Sheaf-Inspired Engine (SFDB)}
+\label{sec:arch:sheaf}
+
+The SFDB engine stores each fact as a single \texttt{LocalSection} attached
+to the context that names the fact's scope of validity. It maintains
+several indexes concurrently:
+
+\begin{description}
+    \item[Open-set index] maps a context $c$ to the set of local sections
+          that live in the open set $\downarrow c$;
+    \item[Stalk index] maps an entity identifier to the set of contexts in
+          which the entity appears; this is the index consulted by
+          entity-centric LOOKUP queries;
+    \item[Restriction index] caches restriction maps $\rho_{V, U}$ for the
+          $(V, U)$ pairs that have been requested during query execution;
+    \item[Neighbourhood index] records, for each context, its immediate
+          parents and children in the poset, so that neighbourhood queries
+          walk the poset instead of scanning all sections;
+    \item[Global section cache] memoises the most recent global-section
+          reconstruction and is invalidated on insert.
+\end{description}
+
+The SFDB engine builds its topology incrementally: an insert extends the
+context poset with any new context nodes and attaches the section to the
+corresponding open set. This keeps insert cost linear in the number of
+existing facts. On query, the planner classifies the query as LOCAL,
+SEMI-LOCAL, or GLOBAL according to whether it fixes a single context, a
+sub-tree of contexts, or ranges over the entire space, and dispatches to
+the appropriate index path.
+
+\subsection{The Query Interface}
+\label{sec:arch:query}
+
+Both engines share a small, uniform query interface. A query is a value of
+the \texttt{Query} type with a query kind (LOOKUP, GLOBAL, WALK, JOIN,
+GLUE), an optional context scope, an optional entity anchor, an optional
+temporal envelope, and a result limit. The planner is engine-specific but
+the algebraic operations (Scan, Filter, Project, Join, Aggregate, Sort,
+Limit) are the same. Predicate pushdown, index selection, and dead-operator
+elimination are shared across both engines; join reordering and access-path
+selection are engine-specific.
+
+\subsection{The Verification Harness}
+\label{sec:arch:verify}
+
+The canonical layer sits between the engines and any client that wishes to
+compare results. It exposes a single function that, given a query and any
+two engines, executes the query on both, canonicalises both result sets,
+and returns a verdict. The benchmark runner (Section~\ref{sec:evaluation})
+uses this function to enforce semantic equivalence for every query it
+measures.

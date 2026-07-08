@@ -1,53 +1,71 @@
 \section{Future Work}
 \label{sec:future}
 
-\subsection{Distributed SheafDB}
-\label{sec:future:distributed}
+Several concrete extensions would improve either the design or the
+credibility of the evaluation. We list them in the order we consider
+useful.
 
-Extending SheafDB to distributed execution across multiple nodes would
-enable scaling to larger datasets. The sheaf structure naturally
-partitions by context subtree, suggesting a distributed design where
-each node owns a subset of contexts and communicates via restriction
-maps.
-
-\subsection{Parallel Query Execution}
-\label{sec:future:parallel}
-
-Global section computation and gluing are embarrassingly parallel at the
-fact level. Future work could exploit multi-threading and GPU acceleration
-for these operations.
-
-\subsection{Incremental Restriction Maps}
-\label{sec:future:incremental}
-
-Currently, restriction maps are computed on demand. Caching frequently
-used restrictions and incrementally updating the cache on fact insertion
-would improve query performance.
-
-\subsection{Dynamic Topologies}
-\label{sec:future:dynamic}
-
-The context poset is currently static. Supporting dynamic insertion and
-deletion of contexts would enable applications where the scoping structure
-evolves over time.
-
-\subsection{Global Fact Index for Full-Scan Queries}
+\subsection{A Flat Fact Index for Full Scans}
 \label{sec:future:global-index}
 
-The current implementation's GLOBAL query performance degrades to 1405$\times$ slower than KG at 10K facts due to open-set iteration.  A flat fact index maintained in parallel with the sheaf structure would allow full-scan queries to bypass open-set enumeration entirely, matching KG performance while preserving LOOKUP advantages.
+The GLOBAL query penalty reported in Section~\ref{sec:evaluation} is due to
+open-set enumeration. Maintaining a flat fact index in parallel with the
+sheaf structure would let unrestricted scans bypass the open-set walk
+entirely and match the KG baseline on GLOBAL queries while preserving the
+stalk-indexed advantage on LOOKUP. The engineering cost is modest: an
+additional insert-time write per fact and a small amount of additional
+memory. This is the single change most likely to remove the paper's most
+prominent negative result, and it would be our first extension.
 
-\subsection{Compression}
+\subsection{Real-World Datasets and Standard Benchmarks}
+\label{sec:future:real-data}
+
+The evaluation uses synthetic data. Repeating it on
+LUBM~\cite{guo2005lubm} and on a subset of DBpedia or Wikidata would
+provide numbers that can be compared against published results for
+Jena, GraphDB, and Virtuoso. The LUBM data loader is already implemented
+(\texttt{sfdb.datasets.lubm}); the missing piece is wiring it into the
+benchmark runner and reporting cross-engine numbers on the LUBM query set.
+
+\subsection{Integration With a Production RDF Store}
+\label{sec:future:jena}
+
+The Apache Jena adapter based on \texttt{rdflib} is scaffolded but not
+included in the reported results. Extending it to talk to a running Jena
+TDB2 endpoint (or Virtuoso, or GraphDB) and reporting comparable numbers
+would let us report absolute performance against the state of the art
+rather than against our own baseline.
+
+\subsection{Incremental Restriction and Global-Section Maintenance}
+\label{sec:future:incremental}
+
+Restriction maps are computed on demand and cached. Incremental
+maintenance---updating cached restriction maps and the global-section
+cache on insert rather than invalidating them---would improve query
+latency in workloads that mix inserts and queries.
+
+\subsection{Concurrent and Distributed Execution}
+\label{sec:future:distributed}
+
+Global-section computation is embarrassingly parallel across independent
+context sub-trees. A parallel implementation would remove the single-node
+scalability ceiling. A distributed implementation would additionally
+require a partitioning strategy for the context poset and an inter-node
+restriction-map protocol.
+
+\subsection{Compression of Contextually Redundant Data}
 \label{sec:future:compression}
 
-Context-indexed storage admits specialized compression schemes:
-sections sharing the same context can be packed and encoded together,
-reducing the storage overhead identified in the evaluation.
+Sections that share a common context or that agree under restriction on a
+large sub-tree admit context-aware compression schemes that are not
+available to a flat triple store. Realising this would reduce the storage
+overhead identified in Section~\ref{sec:evaluation}.
 
-\subsection{Hybrid Systems}
+\subsection{Hybrid Storage}
 \label{sec:future:hybrid}
 
-A hybrid system that dynamically selects between KG and sheaf representations
-based on query patterns could combine the strengths of both approaches.
-The optimizer could decide at query time which engine to use, or data
-could be replicated across both representations with automatic
-synchronization.
+A hybrid system that stores facts under both representations and lets the
+optimiser choose the access path at query time would combine SFDB's LOOKUP
+advantage with the KG baseline's GLOBAL advantage at the cost of double
+storage. In workloads where storage is cheap relative to query latency,
+this is the natural production design.

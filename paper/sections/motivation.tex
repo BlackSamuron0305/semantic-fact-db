@@ -1,45 +1,91 @@
 \section{Motivation}
 \label{sec:motivation}
 
-\subsection{Limitations of Triple-Based Representations}
+We motivate the design by working through a concrete example that recurs, in
+various forms, across our target domains. Consider the following statement,
+recorded in a biomedical knowledge base:
+
+\begin{quote}
+Aspirin, at a dose of $100\text{ mg}$ per day, taken orally by adult subjects,
+inhibits COX-1, with a confidence of $0.92$, according to a randomised trial
+published in 2019, in the clinical-adult context.
+\end{quote}
+
+The statement is a single fact about a single relationship. Its arguments are
+the compound (\emph{aspirin}), the dose ($100\text{ mg/day}$), the route
+(\emph{oral}), the population (\emph{adult}), the target (\emph{COX-1}), the
+outcome (\emph{inhibition}), the confidence ($0.92$), the source (\emph{a
+randomised trial published in 2019}), and the context of validity
+(\emph{clinical, adult}). There are two things to notice.
+
+\subsection{The Cost of Reifying $n$-ary Facts}
 \label{sec:motivation:triples}
 
-Standard knowledge graphs decompose all facts into subject-predicate-object
-triples. While this uniform representation simplifies storage and querying
-for binary relations, it introduces significant overhead for $n$-ary
-relations such as ``Alice sold a car to Bob for \$20,000 on 2024-01-15.''
-This fact has arity $k = 4$ (buyer, seller, object, price, date) and
-requires reification into $k + 2$ triples~\cite{manola2004rdf}.
+Recorded as RDF triples, the statement above cannot fit into a single
+$(s, p, o)$ record. The standard workaround is reification: a fresh event node
+$e$ is minted, the fact is asserted as $(e, \texttt{rdf:type}, \texttt{Fact})$,
+and each argument becomes its own triple pointing at $e$. For a fact with
+$k$ arguments, one obtains $O(k)$ triples plus the event-type triple; the
+inverse operation, reconstructing the original fact from the triples, requires
+$k$ joins on the event node. On our example this yields roughly ten triples in
+place of one statement, and any query that touches multiple arguments--- ``all
+compounds that inhibit COX-1 at oral doses above $50\text{ mg}$''---must join
+across all of them.
 
-The consequences include:
-\begin{itemize}
-    \item \textbf{Join explosion:} Reconstructing the original fact requires
-          $k$ joins, each with cost proportional to the index size.
-    \item \textbf{Storage amplification:} Each $n$-ary fact generates
-          $n+3$ triples instead of a single record.
-    \item \textbf{Loss of context:} The context of a fact (its scope of
-          validity) is not a first-class concept in the triple model.
-\end{itemize}
+Named graphs~\cite{carroll2005named} and property graphs~\cite{angles2017property}
+soften this problem in specific ways: named graphs attach a fourth coordinate
+(the graph name) to each triple, and property graphs decorate edges with
+attribute maps. Both mechanisms improve on pure RDF for particular workloads,
+but neither of them removes the underlying atomicity mismatch: the storage
+unit is smaller than the semantic unit, and the cost of reassembly is paid
+on every query.
 
-\subsection{The Case for Sheaf Theory}
+\subsection{Contexts Are Not First-Class}
+\label{sec:motivation:contexts}
+
+The example also contains a \emph{context}: the statement is asserted \emph{in
+the clinical-adult context}. The same clinical fact, restricted to a
+paediatric population, may fail. In practice, contexts are usually encoded
+either through named graphs (one graph per context), through further
+reification (each fact carries a $\texttt{sfdb:context}$ triple), or through
+convention in the predicate URI. All three approaches work, but none of them
+makes context part of the database's core index structure. Queries that scope
+naturally by context--- ``all facts that hold in the \emph{clinical.adult}
+context''---end up as filters or joins over auxiliary data rather than as
+primary-index lookups.
+
+\subsection{What a Context-Indexed Store Would Buy}
 \label{sec:motivation:sheaf}
 
-Sheaf theory addresses these limitations by providing:
-\begin{itemize}
-    \item \textbf{First-class $n$-ary relations:} A fact with arity $k$
-          is stored as a single section, not decomposed.
-    \item \textbf{Native context support:} The poset of contexts models
-          scoping directly.
-    \item \textbf{Locality:} Queries within a single context examine only
-          that context's sections.
-    \item \textbf{Gluing:} Global facts can be reconstructed from compatible
-          local sections.
-\end{itemize}
+Suppose that, instead of triples, the primary storage unit were the full
+fact---the tuple of all arguments plus the context---and that the primary
+index were keyed by context. Two consequences follow immediately. A lookup
+that resolves a specific entity within a specific context becomes a single
+hash probe into the stalk at that context, returning the complete fact
+without joins. A query that scopes to a sub-tree of the context poset touches
+exactly the sections attached to that sub-tree, without scanning the whole
+store. Neither observation is deep; both are essentially bookkeeping. The
+question is whether the bookkeeping pays for itself in practice, and whether
+its costs on the queries it does not help---in particular, unrestricted
+full-scan queries---are acceptable.
+
+The remainder of the paper answers those questions concretely. Section
+\ref{sec:mathematical_model} names the structure precisely and identifies the
+minimal presheaf machinery that our implementation actually uses. Sections
+\ref{sec:system-architecture} and \ref{sec:implementation} describe the
+storage engine that realises it. Section~\ref{sec:evaluation} measures both
+the benefit on LOOKUP queries and the cost on GLOBAL queries, on identical
+workloads verified for semantic equivalence against a conventional
+triple-store baseline.
 
 \subsection{Research Gap}
 \label{sec:motivation:gap}
 
-While sheaf theory has been applied to distributed computing, data fusion,
-and sensor networks~\cite{robinson2020sheaf}, no prior work has built a
-complete database system around sheaf-theoretic principles and evaluated it
-against a traditional KG baseline on realistic workloads.
+Sheaf theory has been applied to distributed computing, sensor
+fusion~\cite{robinson2020sheaf}, and categorical database
+theory~\cite{patterson2022sheaf}. Formal Concept Analysis~\cite{ganter1999formal}
+uses similar lattice structures for concept hierarchies but does not include
+restriction maps or a notion of stalk. To the best of our knowledge, no prior
+system combines a context-indexed storage layer with a stalk-based query path
+and a mechanised proof of equivalence against a triple-store baseline on the
+same core schema.

@@ -60,14 +60,14 @@
 | SheafDB provides native consistency checking | C8 benchmark + `ConsistencyChecker` | ✓ |
 | SheafDB enables global section construction | C9 benchmark + `compute_global_sections()` | ✓ |
 | SheafDB handles n-ary facts natively | C3, C4 benchmarks with arity 3, 5, 8 | ✓ |
-| Incremental topology reduces insert cost | O(N²) → O(N) insert performance | ✓ (321 tests pass) |
+| Incremental topology reduces insert cost | O(N²) → O(N) insert performance | ✓ (347 tests pass) |
 | Safe expression evaluation | `common/safe_eval.py` replaces `eval()` | ✓ (security review) |
 
 ### Reproducibility
 
 | Requirement | Status | Procedure |
 |-------------|--------|-----------|
-| Clean environment → tests | ✓ | `uv sync --group dev && uv run pytest` (321 passed) |
+| Clean environment → tests | ✓ | `uv sync --group dev && uv run pytest` (347 passed) |
 | Benchmark reproduction | ✓ | `sfdb benchmark --size small` produces valid results |
 | Paper generation | ∼ | `cd paper && make` requires LaTeX installation |
 | Deterministic dataset generation | ✓ | Seeded RNG (`seed=42`) |

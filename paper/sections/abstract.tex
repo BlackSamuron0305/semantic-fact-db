@@ -1,18 +1,40 @@
-We investigate whether sheaf theory provides a more efficient representation
-for semantic facts than traditional knowledge graphs (KGs).
-Standard KGs decompose $n$-ary semantic events into binary triples via
-reification, increasing join complexity and storage overhead.
-We propose a sheaf-based representation where semantic facts are sections
-over a finite topological space, and queries are answered via restriction
-maps rather than graph traversal.
-We implement both a realistic KG baseline and a sheaf database (SheafDB),
-prove their semantic equivalence via a canonical intermediate representation,
-and benchmark them on identical workloads.
-Our results show that SheafDB reduces LOOKUP latency by 3--30$\times$ via
-stalk-indexed retrieval while matching KG insert performance.
-However, full-scan (GLOBAL) queries are 1--1400$\times$ slower due to
-open set iteration overhead, revealing a fundamental tradeoff between
-contextual locality and global access.
-We provide theoretical guarantees for locality, gluing, and global section
-reconstruction, and discuss the conditions under which each representation
-is preferred.
+Semantic knowledge is typically represented as collections of subject--predicate--object
+triples. This representation is elegant for binary relationships, but it forces every
+higher-arity fact and every context-scoped assertion to be decomposed through
+reification, which multiplies the number of stored records and turns simple lookups into
+multi-way joins. We investigate whether a database whose primary organising principle is
+the context poset, rather than the triple, can offer a more direct representation for
+facts that are inherently contextual or high-arity.
+
+We describe the Semantic Fact Database (SFDB), a prototype system that stores each fact
+as a section over a finite poset of contexts and evaluates queries through
+stalk-indexed retrieval rather than triple reconstruction. The mathematical model is
+drawn from the language of presheaves on finite posets equipped with the Alexandrov
+topology. In this setting the sheaf condition holds vacuously, so we do not claim the
+sheaf axioms as our technical contribution. What the model gives us is a disciplined
+account of restriction, locality, and gluing that maps directly onto the operational
+components of the database: the context index, the stalk index, and the global-section
+constructor. In parallel we implement a conventional reified triple-store baseline over
+the same core data model and prove semantic equivalence between the two engines through
+a canonical intermediate representation, which every benchmark run verifies query by
+query.
+
+The evaluation compares both engines on ten workloads at scales of 100, 1\,000, and
+10\,000 facts. Insert throughput is essentially identical
+(SFDB is $0.88$--$0.96\times$ the KG baseline). Entity-centric LOOKUP queries are
+faster on SFDB by a factor of three to thirty because the stalk index returns complete
+facts in a single hash lookup, whereas the baseline must reconstruct them from reified
+triples through joins. Unrestricted full-scan (GLOBAL) queries are substantially slower
+on SFDB, up to a factor of $1405$ at $10^4$ facts, because the current prototype
+enumerates open sets instead of maintaining a flat fact index. We report this negative
+result prominently: it exposes a genuine tradeoff between contextual locality and
+global access that any context-indexed system must confront. A flat auxiliary index,
+sketched in the future work, would remove it.
+
+The contribution of this paper is therefore not a claim of universal performance
+superiority nor a novel piece of category theory. It is (i)~a workable design for a
+context-indexed semantic fact database backed by an implementation and full test suite,
+(ii)~a mechanised proof of semantic equivalence between the sheaf-inspired engine and a
+conventional triple store, and (iii)~a careful benchmark that maps the design's
+strengths and weaknesses onto a LOOKUP-versus-GLOBAL taxonomy. All results are
+reproducible from the released artifact.

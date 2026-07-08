@@ -1,53 +1,48 @@
-We present the complete formal mathematical model underlying SheafDB.
-This section consolidates notation, definitions, and structural properties.
-All definitions are standard within sheaf theory~\cite{maclane1992sheaves}
-and are adapted to the finite, discrete setting of knowledge representation.
+\section{Formal Model}
+\label{sec:mathematical_model}
 
-\subsection{Formal Notation}
+This section states the formal model of the database in the minimal form that
+suffices to describe the implementation and the equivalence proof. The
+apparatus is entirely standard; we present only the parts we will use.
+
+\subsection{Notation}
 \label{sec:notation}
 
-We use the following notation throughout:
-
-\begin{itemize}
-    \item $\mathbb{N}$: natural numbers $\{0,1,2,\ldots\}$.
-    \item $\mathcal{P}(X)$: power set of $X$.
-    \item $|X|$: cardinality of $X$.
-    \item $f: A \to B$: total function; $f: A \rightharpoonup B$: partial function.
-    \item $g \circ f$: composition $(g \circ f)(x) = g(f(x))$.
-    \item $\operatorname{id}_X$: identity function on $X$.
-    \item $(P, \leq)$: a poset with order relation $\leq$.
-    \item $\downarrow x = \{y \in P \mid y \leq x\}$: down-set of $x$.
-    \item $x \wedge y$: meet (greatest lower bound); $x \vee y$: join (least upper bound).
-    \item $\mathcal{I}$: set of identifiers (UUIDs).
-    \item $\mathcal{E} \subseteq \mathcal{I}$: set of entity identifiers.
-    \item $\mathcal{R} \subseteq \mathcal{I}$: set of relation identifiers.
-    \item $\mathcal{V} = \mathcal{I} \sqcup \mathbb{L}$: values (identifiers or literals).
-    \item $\mathcal{C}$: set of contexts, a finite poset.
-    \item $\mathcal{F}$: set of all possible semantic facts.
-    \item $F$: a presheaf or sheaf.
-    \item $F(U)$: sections over open set $U$.
-    \item $\rho_{V,U}: F(V) \to F(U)$: restriction map for $U \subseteq V$.
-    \item $F_x$: stalk at point $x$: $\varinjlim_{U \ni x} F(U)$.
-    \item $\Gamma(X, F)$: global sections $F(X)$.
-    \item $\llbracket Q \rrbracket$: denotation (result) of query $Q$.
-\end{itemize}
+We reuse the notation of Section~\ref{sec:problem}. Additionally, $\mathcal{V}$
+denotes the set of values (either identifiers or literals) that may appear in
+object slots, $F(U)$ denotes the set of local sections that a presheaf $F$
+assigns to an open set $U$, and $\rho_{V, U}: F(V) \to F(U)$ denotes the
+restriction map from a broader open set $V$ to a narrower open set $U \subseteq V$.
+The stalk $F_x$ at a point $x$ is the direct limit $\varinjlim_{U \ni x} F(U)$.
+Global sections are elements of $\Gamma(X, F) = F(X)$.
 
 \subsection{Category-Theoretic Setting}
 \label{sec:categorical}
 
-Let $\mathbf{Set}$ denote the category of sets and functions,
-and $\mathbf{Pos}$ the category of partially ordered sets and monotone maps.
-A presheaf on a small category $\mathcal{C}$ is a functor
-$F: \mathcal{C}^{\mathrm{op}} \to \mathbf{Set}$.
-
-In our setting, $\mathcal{C}$ is the context poset $(\mathcal{C}, \leq)$
-viewed as a category: objects are contexts, and there is a unique morphism
-$c \to d$ iff $d \leq c$. The opposite category $\mathcal{C}^{\mathrm{op}}$
-reverses this: a morphism corresponds to $c \leq d$, i.e., restriction from
-a broader context to a narrower one.
+The category $\mathcal{C}$ that we work over is the context poset $(\mathcal{C}, \leq)$
+viewed as a small category: objects are contexts, and there is a unique morphism
+$c \to d$ whenever $d \leq c$ (from a more specific context to a more general
+one). A presheaf on $\mathcal{C}$ is a functor
+$F: \mathcal{C}^{\mathrm{op}} \to \mathbf{Set}$, i.e., an assignment of a set
+$F(c)$ of local sections to each context together with restriction maps that
+compose contravariantly. Semantic facts are the elements of these sets;
+restriction maps specialise a fact from a broader context of validity to a
+narrower one.
 
 \input{sections/formal_definitions.tex}
 \input{sections/theorems.tex}
 
+\subsection{A Note on the Sheaf Condition}
+\label{sec:sheaf-remark}
 
-
+The topology we work with is the Alexandrov topology on the finite context
+poset. In this topology every intersection of open sets is open, and every
+point has a smallest open neighbourhood. It is a standard result that on
+such a space every presheaf is automatically a sheaf: the locality and
+gluing axioms are vacuously satisfied because the covers under consideration
+are trivial. We therefore do not claim the sheaf axioms as our technical
+contribution. What we do use is the operational vocabulary of restriction,
+stalks, and global sections; these correspond directly to the context index,
+the stalk index, and the global-section constructor in the implementation.
+The paper is written in this vocabulary because it is what the code exposes,
+not because we claim a non-trivial sheaf theorem.

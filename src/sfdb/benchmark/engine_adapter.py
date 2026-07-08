@@ -307,8 +307,10 @@ class BlazegraphEngineAdapter(EngineAdapter):
     """Stub adapter — not yet implemented."""
 
     def __init__(self) -> None:
-        self._available = False
-        raise NotImplementedError("Blazegraph adapter is scaffolded but not yet integrated into the benchmark pipeline")
+        raise NotImplementedError(
+            "BlazegraphEngineAdapter is a scaffold. "
+            "See src/sfdb/benchmark/engine_adapter.py for integration notes."
+        )
 
     def name(self) -> str:
         return "Blazegraph"
@@ -333,8 +335,10 @@ class Neo4jEngineAdapter(EngineAdapter):
     """Stub adapter — not yet implemented."""
 
     def __init__(self) -> None:
-        self._available = False
-        raise NotImplementedError("Neo4j adapter is scaffolded but not yet integrated into the benchmark pipeline")
+        raise NotImplementedError(
+            "Neo4jEngineAdapter is a scaffold. "
+            "See src/sfdb/benchmark/engine_adapter.py for integration notes."
+        )
 
     def name(self) -> str:
         return "Neo4j"

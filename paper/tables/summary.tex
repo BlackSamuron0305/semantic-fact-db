@@ -1,12 +1,16 @@
 % Auto-generated summary table from benchmark results
-\begin{tabular}{@{}lcc@{}}
+\begin{tabular}{@{}lrrr@{}}
 \toprule
-Benchmark & KnowledgeGraph & SheafDatabase \\
+Metric & KG & SheafDB & Ratio \\
 \midrule
-consistency & 2.4 & 4.2 & \\
-micro_100 & 2.8 & 4.9 & \\
-micro_1k & 2.4 & 3.9 & \\
-micro_5k & 2.9 & 5.2 & \\
-scal_10k & 2.8 & 4.7 & \\
+Insert (100)  & 5.8ms & 5.1ms & 0.88x \\
+Insert (1K)   & 59.0ms & 53.7ms & 0.91x \\
+Insert (10K)  & 651.1ms & 627.0ms & 0.96x \\
+LOOKUP (100)  & 0.008ms & 0.003ms & 0.38x \\
+LOOKUP (1K)   & 0.526ms & 0.008ms & 0.02x \\
+LOOKUP (10K)  & 2.279ms & 0.074ms & 0.03x \\
+GLOBAL (100)  & 3.359ms & 3.244ms & 0.97x \\
+GLOBAL (1K)   & 3.664ms & 90.035ms & 24.6x \\
+GLOBAL (10K)  & 7.403ms & 10407ms & 1405x \\
 \bottomrule
 \end{tabular}
