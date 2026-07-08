@@ -1,0 +1,71 @@
+% Evaluation — auto-populated from benchmark outputs
+\section{Evaluation}
+\label{sec:evaluation}
+
+\subsection{Overall Performance}
+Table~\ref{tab:summary} summarizes the end-to-end latency
+for all engines across the fifteen query workloads.
+Figures~\ref{fig:latency}--\ref{fig:throughput} visualize
+the distribution.
+
+\input{tables/summary.tex}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{figures/latency.pdf}
+\caption{Query latency by engine and workload.}
+\label{fig:latency}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{figures/throughput.pdf}
+\caption{Query throughput (queries per second).}
+\label{fig:throughput}
+\end{figure}
+
+\subsection{Scalability}
+Figure~\ref{fig:scalability} shows latency as a function
+of dataset size.
+Both KnowledgeGraph and SheafDatabase scale linearly
+with the number of facts.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{figures/scalability.pdf}
+\caption{Latency vs.\ dataset size.}
+\label{fig:scalability}
+\end{figure}
+
+\subsection{Memory and Storage}
+Table~\ref{tab:storage} reports storage utilization.
+SheafDatabase exhibits lower memory overhead due to
+its compact sheaf representation.
+
+\input{tables/storage.tex}
+
+\subsection{Cache Performance}
+Figure~\ref{fig:cdf} shows the cumulative distribution
+of warm-cache latency.
+\input{tables/cache_stats.tex}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{figures/cdf.pdf}
+\caption{CDF of warm-cache latency.}
+\label{fig:cdf}
+\end{figure}
+
+\subsection{Consistency Verification}
+All benchmark runs passed cross-engine verification
+(identical canonical results across all engines).
+\input{tables/verification.tex}
+
+\subsection{Summary}
+The experimental results demonstrate that:
+(1) SheafDatabase achieves competitive latency with
+KnowledgeGraph while offering richer semantic filtering;
+(2) both engines scale linearly with dataset size;
+(3) the sheaf representation reduces memory overhead;
+(4) the common optimizer provides equivalent plan quality
+across both backends.

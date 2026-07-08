@@ -1,0 +1,38 @@
+% Global sections
+
+\subsection{Global Sections}
+
+A global section is a section $s \in F(\mathbb{U})$ defined on the universal open set $\mathbb{U} = X$ — equivalently, a consistent assignment of a SemanticFact to every point in the space. Global sections are the sheaf-theoretic analogue of "complete knowledge" about a fact.
+
+\subsubsection{Gluing Algorithm}
+
+The gluing algorithm computes global sections from compatible local sections. Given two open sets $U$ and $V$ with non-empty intersection, a fact $f$ with sections $s_U \in F(U)$ and $s_V \in F(V)$ can be glued into a global section if $s_U$ and $s_V$ agree on the overlap $U \cap V$:
+
+\begin{algorithm}[H]
+\caption{Compute global sections via gluing}
+\label{alg:gluing}
+\begin{algorithmic}[1]
+\Require A sheaf $F$ over $(X, \tau)$
+\Ensure All global sections of $F$
+\State $G \gets \emptyset$
+\For{each pair $(U, V)$ with $U \cap V \neq \emptyset$}
+    \For{each $f \in U \cap V$}
+        \If{$s_U(f) = s_V(f)$}
+            \State $G \gets G \cup \{f\}$
+        \EndIf
+    \EndFor
+\EndFor
+\Return $G$
+\end{algorithmic}
+\end{algorithm}
+
+\noindent Complexity: $O(k^2 \cdot m)$ where $k = |\tau|$ and $m = \max_{U \in \tau} |F(U)|$.
+
+\subsubsection{Caching}
+
+Computed global sections are cached in the GlobalSectionCache. The cache is invalidated whenever a new fact is inserted, updated, or deleted — at which point global sections must be recomputed.
+
+\subsubsection{Correctness}
+
+If the sheaf satisfies the gluing axiom, then any two local sections that agree on all overlaps glue uniquely to a global section. Our implementation verifies this condition during consistency checks. In practice, because each SemanticFact has a unique identifier, agreement reduces to checking that the two sections reference the same ID and that their attribute values are compatible.
+\endinput

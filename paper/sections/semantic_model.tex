@@ -1,0 +1,46 @@
+\section{Semantic Model}
+\label{sec:semantic-model}
+
+The semantic model defines the data types that flow through the system.
+
+\subsection{SemanticFact}
+\label{sec:semantic-model:fact}
+
+The core data type is \texttt{SemanticFact}, an immutable record with the
+following fields:
+
+\begin{description}
+    \item[id] A globally unique identifier (UUID).
+    \item[subject] The entity identifier that is the subject of the fact.
+    \item[relation] The relation type identifier.
+    \item[objects] An ordered tuple of values (entity IDs or literals).
+    \item[context] The context in which this fact is valid.
+    \item[confidence] A floating-point value in $[0, 1]$ indicating
+          certainty.
+    \item[metadata] An optional map of key-value pairs for extensibility.
+\end{description}
+
+\subsection{Entity and Relation}
+\label{sec:semantic-model:entity}
+
+Entities and relations are typed identifiers. Each entity has a semantic
+type (e.g., \texttt{Person}, \texttt{Organization}, \texttt{Event}) and
+may carry attributes. Each relation has an arity and typed slots.
+
+\subsection{Context}
+\label{sec:semantic-model:context}
+
+A context is a dot-separated path string representing a scope of validity.
+Contexts form a finite poset under prefix inclusion (Definition~\ref{def:context}).
+The root context ``world'' is the least specific; sub-contexts refine the scope.
+
+\subsection{Invariants}
+\label{sec:semantic-model:invariants}
+
+Every \texttt{SemanticFact} satisfies:
+\begin{enumerate}
+    \item Immutability: once created, fields do not change.
+    \item Identifier uniqueness: no two facts share an ID.
+    \item Confidence bounds: $0.0 \leq \text{confidence} \leq 1.0$.
+    \item Referential integrity: subject and referenced objects exist.
+\end{enumerate}

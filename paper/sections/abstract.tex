@@ -1,0 +1,15 @@
+We investigate whether sheaf theory provides a more efficient representation
+for semantic facts than traditional knowledge graphs (KGs).
+Standard KGs decompose $n$-ary semantic events into binary triples via
+reification, increasing join complexity and storage overhead.
+We propose a sheaf-based representation where semantic facts are sections
+over a finite topological space, and queries are answered via restriction
+maps rather than graph traversal.
+We implement both a realistic KG baseline and a sheaf database (SheafDB),
+prove their semantic equivalence via a canonical intermediate representation,
+and benchmark them on identical workloads.
+Our results show that SheafDB reduces join complexity for contextual queries
+but incurs higher storage overhead for highly interconnected facts.
+We provide theoretical guarantees for locality, gluing, and global section
+reconstruction, and discuss the conditions under which each representation
+is preferred.

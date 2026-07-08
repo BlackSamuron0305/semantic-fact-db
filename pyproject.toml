@@ -1,0 +1,81 @@
+[project]
+name = "sfdb"
+version = "0.1.0"
+description = "Semantic Fact Database — a sheaf-theoretic approach to semantic knowledge representation"
+requires-python = ">=3.12"
+authors = []
+license = { text = "MIT" }
+readme = "README.md"
+
+dependencies = [
+    "numpy>=1.26",
+    "scipy>=1.12",
+    "pandas>=2.2",
+    "pyarrow>=16.0",
+    "duckdb>=0.10",
+    "rdflib>=7.0",
+    "networkx>=3.2",
+    "matplotlib>=3.8",
+    "rich>=13.0",
+    "typer>=0.9",
+    "orjson>=3.9",
+    "psutil>=5.9",
+    "pydantic>=2.5",
+    "pyyaml>=6.0.3",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 99
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP", "B", "SIM", "ARG", "C4", "RUF"]
+ignore = ["RUF001", "RUF002", "N818", "UP046"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+mypy_path = "src"
+explicit_package_bases = true
+namespace_packages = true
+warn_unused_configs = true
+disallow_any_unimported = true
+disallow_subclassing_any = true
+disallow_untyped_calls = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_return_any = true
+strict_equality = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-v --tb=short --strict-markers"
+
+[project.scripts]
+sfdb = "sfdb.cli:main_cli"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=4.1",
+    "hypothesis>=6.98",
+    "mypy>=1.8",
+    "ruff>=0.2",
+    "types-psutil>=7.2.2.20260518",
+    "types-pyyaml>=6.0.12.20260518",
+]

@@ -1,0 +1,43 @@
+\section{Implementation}
+\label{sec:implementation}
+
+\subsection{Repository Structure}
+\label{sec:impl:repository}
+
+The implementation is organised as a Python 3.12+ package with the
+following modules:
+
+\begin{description}
+    \item[\texttt{sfdb.common}] Shared data types and interfaces
+          (\texttt{SemanticFact}, \texttt{Entity}, \texttt{Relation}).
+    \item[\texttt{sfdb.canonical}] Canonical mapping between generic
+          facts and engine-specific representations.
+    \item[\texttt{sfdb.kg}] Knowledge Graph engine: triple storage,
+          indexing, reification, SPARQL-like query execution.
+    \item[\texttt{sfdb.sheaf}] Sheaf Database engine: topology construction,
+          restriction maps, gluing, context-indexed storage.
+    \item[\texttt{sfdb.query}] Query language, parser, planner, optimizer,
+          and execution engine.
+    \item[\texttt{sfdb.optimizer}] Cost-based optimizer shared across
+          engines with engine-specific cost models.
+    \item[\texttt{sfdb.datasets}] Synthetic and real dataset loaders.
+    \item[\texttt{sfdb.benchmark}] Benchmark framework: runner, metrics,
+          verification, visualization.
+    \item[\texttt{sfdb.storage}] Serialization (JSON, Parquet, MessagePack).
+    \item[\texttt{sfdb.utils}] Configuration, logging, timing utilities.
+    \item[\texttt{sfdb.visualization}] Plot generation (\texttt{matplotlib}).
+\end{description}
+
+\subsection{Configuration}
+\label{sec:impl:config}
+
+All engines share a common configuration system with three sources:
+YAML files, environment variables (prefix \texttt{SFDB\_}), and
+programmatic overrides via the \texttt{Config} dataclass.
+
+\subsection{Testing}
+\label{sec:impl:testing}
+
+The test suite uses \texttt{pytest} with \texttt{pytest-cov} for coverage.
+Module tests validate individual components. Round-trip tests verify the
+canonical mapping. Benchmark tests validate cross-engine equivalence.

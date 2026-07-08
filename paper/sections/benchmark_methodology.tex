@@ -1,0 +1,42 @@
+% Benchmark Methodology
+\section{Benchmark Methodology}
+\label{sec:methodology}
+
+\subsection{Fairness}
+All engines execute identical logical queries via a common
+adapter interface.
+Query translation overhead is excluded from runtime measurements.
+Each engine is configured with default settings;
+no engine-specific tuning is performed.
+
+\subsection{Cache Modes}
+\textbf{Cold cache:} The engine state is re-initialized before
+each run. Ten runs are collected.
+\textbf{Warm cache:} The engine retains state across runs.
+Fifty runs are collected after three warm-up iterations.
+
+\subsection{Outlier Handling}
+Outliers are discarded only when Grubbs' test identifies them
+as statistically significant ($\alpha = 0.05$).
+All discarded outliers are documented.
+
+\subsection{Correctness Verification}
+Before recording performance, every benchmark run verifies
+cross-engine result equivalence.
+If any engine produces a different canonical result for the
+same query, the benchmark is rejected and flagged.
+
+\subsection{Statistical Analysis}
+We report mean, median, standard deviation,
+P50, P95, P99 percentiles,
+95\% confidence intervals using the normal approximation,
+and bootstrap confidence intervals (10,000 resamples).
+
+\subsection{Reproducibility}
+Every benchmark run records:
+Python version, uv lock hash, Git commit hash,
+CPU model, memory, operating system,
+random seed, dataset checksum, engine versions,
+and timestamp.
+All generated figures and tables include the
+reproducibility hash in their caption.

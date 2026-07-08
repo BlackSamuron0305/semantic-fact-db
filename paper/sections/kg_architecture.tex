@@ -1,0 +1,28 @@
+\subsection{KG Architecture}
+
+The Knowledge Graph baseline is an RDF-style triple store with the following architectural components:
+
+\begin{enumerate}
+    \item \textbf{Dictionary Encoding Layer}: Maps string identifiers to compact integer IDs for efficient storage and comparison. Three dictionaries are maintained:
+    \begin{itemize}
+        \item Entity dictionary: maps entity URIs/names to integers
+        \item Predicate dictionary: maps predicate URIs/names to integers
+        \item Literal table: maps literal values to integers with type information
+    \end{itemize}
+    
+    \item \textbf{Triple Table}: Core storage table with columns (subject, predicate, object, object\_type). All values are integer IDs from the dictionaries.
+    
+    \item \textbf{Index Layer}: Maintains SPO (subject-predicate-object), POS (predicate-object-subject), and OPS (object-predicate-subject) indexes as B-tree-like structures on the triple table. Support for three additional indexes (SOP, PSO, OSP) can be enabled for workloads requiring arbitrary access patterns.
+    
+    \item \textbf{Reification Layer}: Supports $n$-ary relations by decomposing them into binary triples connected via an event node. The reification table stores (event\_id, pred\_id, obj\_id, role) mappings that allow reconstruction of the original $n$-ary fact.
+    
+    \item \textbf{Query Engine}: Supports SPARQL-inspired queries with SELECT, WHERE, FILTER, OPTIONAL, LIMIT, and ORDER BY clauses. Implements a two-phase planning approach:
+    \begin{itemize}
+        \item Logical planning: produces a tree of logical operators (Scan, IndexSeek, Filter, Join, Project, Sort, Limit, Aggregate)
+        \item Physical planning: converts logical operators into physical execution strategies (nested-loop join, hash join, index lookups)
+    \end{itemize}
+    
+    \item \textbf{Optimizer}: Cost-based optimizer that estimates cardinalities, reorders joins, pushes filters closer to data sources, and selects appropriate indexes. Generates EXPLAIN plans showing estimated costs and row counts.
+\end{enumerate}
+
+The architecture follows a layered design where each component can be tested and optimized independently.

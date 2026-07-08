@@ -1,0 +1,32 @@
+{
+    "suite_name": "default",
+    "output_dir": "results",
+    "datasets": [
+        {
+            "name": "small",
+            "num_entities": 50,
+            "num_relations": 5,
+            "num_facts": 200,
+            "max_arity": 4,
+            "context_depth": 2,
+            "seed": 42
+        },
+        {
+            "name": "medium",
+            "num_entities": 500,
+            "num_relations": 20,
+            "num_facts": 5000,
+            "max_arity": 5,
+            "context_depth": 3,
+            "seed": 42
+        }
+    ],
+    "queries": [
+        {"type": "point_lookup", "num_queries": 10},
+        {"type": "pattern_match", "num_queries": 10},
+        {"type": "walk_traversal", "num_queries": 5, "max_depth": 2},
+        {"type": "context_query", "num_queries": 10}
+    ],
+    "num_runs": 5,
+    "warm_up": 2
+}

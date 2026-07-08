@@ -1,0 +1,39 @@
+\section{Problem Statement}
+\label{sec:problem}
+
+\subsection{Informal Description}
+\label{sec:problem:informal}
+
+We have a collection of semantic facts. Each fact describes a relationship
+between entities within a specific context. Facts are organized by context,
+and contexts form a hierarchy from general to specific. The system must
+support:
+
+\begin{enumerate}
+    \item Storing facts and retrieving them by their properties and context.
+    \item Answering queries that may span multiple contexts.
+    \item Reconstructing global facts from local observations.
+    \item Ensuring semantic equivalence regardless of how facts are stored.
+\end{enumerate}
+
+\subsection{Formal Description}
+\label{sec:problem:formal}
+
+Let $\mathcal{F}$ be the set of all possible semantic facts (Definition~\ref{def:semanticfact}),
+$\mathcal{C}$ a finite poset of contexts, and $Q$ a query language over $\mathcal{F}$.
+
+\textbf{Storage problem:} Given a finite set $F \subseteq \mathcal{F}$,
+construct a data structure $\Sigma(F)$ supporting:
+\begin{enumerate}
+    \item $\textsc{Insert}(f)$: add $f$ to $\Sigma$.
+    \item $\textsc{Query}(Q)$: return $\{f \in \Sigma \mid f \text{ matches } Q\}$.
+    \item $\textsc{Glue}()$: reconstruct global sections from local ones.
+\end{enumerate}
+
+\textbf{Equivalence problem:} For two data structures $\Sigma_1, \Sigma_2$
+built from the same $F$, ensure
+$\llbracket Q \rrbracket_{\Sigma_1} \cong \llbracket Q \rrbracket_{\Sigma_2}$
+for all $Q \in \mathcal{L}(Q)$.
+
+\textbf{Optimization problem:} Minimize query latency $t(Q, \Sigma)$
+subject to storage constraints, for expected query distributions.

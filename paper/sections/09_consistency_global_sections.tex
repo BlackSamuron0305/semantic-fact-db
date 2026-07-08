@@ -1,0 +1,30 @@
+\section{Consistency Checks and Global Sections (C8--C9)}
+\label{sec:consistency}
+
+\paragraph{The consistency problem.}
+When facts are contributed by multiple sources or derived through overlapping inference rules, the same entity may receive conflicting or redundant context assignments. For example, sensor fusion yields overlapping coverage regions that must agree on boundary values; distributed knowledge bases must resolve co-reference across independently curated sub-graphs. The core question is whether a set of locally consistent fact collections can be glued into a globally consistent whole.
+
+\paragraph{KG approach.}
+In a conventional knowledge graph, consistency checking reduces to constraint satisfaction: each overlapping region is encoded as a set of CSP variables whose domains are the possible context values, and constraints enforce agreement on shared variables. Worst-case enumeration of the CSP solution space is exponential in the number of overlapping regions, and practical SPARQL-based consistency queries often time out at modest graph sizes ($10^4$ triples).
+
+\paragraph{SheafDB consistency sheaf.}
+SheafDB replaces CSP enumeration with the sheaf-theoretic cocycle condition. A \emph{consistency sheaf} assigns to each context $U$ the set $\mathcal{F}(U)$ of tuples valid in $U$, with restriction maps $\rho_{U,V}: \mathcal{F}(U) \to \mathcal{F}(V)$ for $V \subseteq U$. Global consistency holds when, for every pair of overlapping contexts $U, V$ and every tuple $t \in \mathcal{F}(U \cap V)$, the cocycle condition
+\[
+\rho_{U \cap V, W} \circ \rho_{U, U \cap V}(t) = \rho_{U \cap V, W} \circ \rho_{V, U \cap V}(t)
+\]
+is satisfied for all $W \subseteq U \cap V$. In practice this reduces to checking that restriction maps agree on the intersection---a polynomial-time comparison of $O(|\mathcal{F}(U \cap V)|)$ tuples per overlapping pair.
+
+\paragraph{Global section construction.}
+Given a consistent family of local assignments, the \emph{global section}---a single consistent fact assignment across the entire context space---is constructed via the gluing axiom. SheafDB implements this as a bottom-up merge over the context lattice: for each maximal chain of nested contexts, local sections are composed via restriction maps. The construction completes in $O(m \cdot d)$ where $m$ is the number of contexts and $d$ is the lattice depth.
+
+\paragraph{Applications.}
+Global sections enable principled data integration: heterogeneous sources produce local sections of the same entity sheaf, and the gluing axiom determines whether they can be merged without contradiction. In sensor fusion, overlapping sensor coverage regions are contexts; the consistency sheaf guarantees that fused readings satisfy physical continuity constraints.
+
+\input{tables/consistency_results.tex}
+
+\begin{figure}
+  \centering
+  \includegraphics{figures/global_section_scaling.pdf}
+  \caption{Consistency check time (C8) and global section construction time (C9) vs.\ number of overlapping contexts. SheafDB scales polynomially; constraint-based approaches exhibit exponential growth.}
+  \label{fig:global_section_scaling}
+\end{figure}

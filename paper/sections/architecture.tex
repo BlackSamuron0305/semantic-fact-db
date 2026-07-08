@@ -1,0 +1,130 @@
+% Architecture
+% This section documents the system architecture, module design,
+% and the common interface shared by all storage engines.
+
+\subsection{Overview}
+
+The SFDB system is organised into three layers:
+
+\begin{enumerate}
+    \item \textbf{Canonical Layer}: The common semantic representation
+        (Section~\ref{sec:semantic-model}) that all engines map to and
+        from.
+    \item \textbf{Engine Layer}: Three independent storage engines that
+        share the same abstract interface.
+    \item \textbf{Benchmark Layer}: A common evaluation framework that
+        communicates only through the abstract interface, ensuring fair
+        comparisons.
+\end{enumerate}
+
+Figure~\ref{fig:architecture} shows the component diagram.
+
+\begin{figure}[ht]
+\centering
+\begin{tikzpicture}[node distance=2cm, every node/.style={draw, rounded corners, minimum width=4cm, align=center}]
+    \node (query) {Query Language};
+    \node (canonical) [below of=query] {Canonical Semantic Model};
+    \node (kg) [below left=1.5cm and 0.5cm of canonical] {Knowledge Graph};
+    \node (sheaf) [below of=canonical] {Sheaf Database};
+    \node (simp) [below right=1.5cm and 0.5cm of canonical] {Simplicial Database};
+    \node (bench) [below=2.5cm of canonical] {Benchmark Framework};
+
+    \draw[->] (query) -- (canonical);
+    \draw[->] (canonical) -- (kg);
+    \draw[->] (canonical) -- (sheaf);
+    \draw[->] (canonical) -- (simp);
+    \draw[->] (kg) -- (bench);
+    \draw[->] (sheaf) -- (bench);
+    \draw[->] (simp) -- (bench);
+\end{tikzpicture}
+\caption{System architecture showing the three storage engines and
+         their relationship to the canonical model and benchmark
+         framework.}
+\label{fig:architecture}
+\end{figure}
+
+\subsection{Module Design}
+
+The system is decomposed into the following modules, each with a single
+well-defined responsibility:
+
+\begin{description}
+    \item[Parser] Transforms a query string into a logical plan that is
+        independent of any storage engine.
+    \item[Validator] Checks that every \texttt{SemanticFact} satisfies
+        its invariants---immutability, identifier uniqueness, confidence
+        bounds, temporal consistency, and referential integrity.
+    \item[Serializer] Converts \texttt{SemanticFact} instances to and
+        from bytes in three formats: JSON, Parquet, and MessagePack.
+        All serialisers are deterministic and lossless.
+    \item[Importer / Exporter] Bulk data transfer between external
+        formats (RDF/XML, Turtle, CSV, JSON-LD) and the canonical
+        model.
+    \item[Storage] The logical layer that maps canonical fields to
+        engine-specific data structures and provides the CRUD interface.
+    \item[Indexes] Engine-private auxiliary structures for fast lookup.
+    \item[Query Planner] Transforms a logical query into a physical
+        execution plan.  The same logical query produces different
+        physical plans for each engine.
+    \item[Query Optimizer] Applies cost-based optimisation rules to the
+        physical plan using engine-specific cost models.
+    \item[Execution Engine] Executes a physical plan against the storage
+        engine and returns canonical results.
+    \item[Statistics] Tracks cardinalities, index sizes, and operation
+        counts for use by the optimizer and benchmark.
+    \item[Visualization] Generates plots from benchmark results using
+        \texttt{matplotlib}.
+    \item[Benchmark Runner] Orchestrates comparative evaluation across
+        all engines with metrics collection and semantic equivalence
+        verification.
+    \item[Paper Generator] Produces \LaTeX{} output from benchmark
+        results for inclusion in this document.
+\end{description}
+
+\subsection{Common Interface}
+
+Every storage engine implements the abstract \texttt{DatabaseEngine}
+interface (Table~\ref{tab:common-interface}), guaranteeing that engines
+are drop-in replaceable and that comparisons are fair.
+
+\begin{table}[ht]
+\centering
+\caption{Common \texttt{DatabaseEngine} interface methods.}
+\label{tab:common-interface}
+\begin{tabular}{@{}ll@{}}
+\toprule
+Method & Description \\
+\midrule
+\texttt{create(config)} & Initialise storage and indexes \\
+\texttt{drop()} & Destroy all data \\
+\texttt{insert(fact)} & Store a single \texttt{SemanticFact} \\
+\texttt{update(id, fact)} & Replace an existing fact \\
+\texttt{delete(id)} & Remove a fact by identifier \\
+\texttt{query(query)} & Execute a logical query \\
+\texttt{explain(query)} & Return execution plan without running \\
+\texttt{statistics()} & Return engine statistics \\
+\texttt{verify()} & Run internal consistency checks \\
+\texttt{export(fmt)} & Export all facts as bytes \\
+\texttt{import(data, fmt)} & Import facts from bytes \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Canonical Pipeline}
+
+All data flows through the same canonical pipeline:
+
+\begin{enumerate}
+    \item A \texttt{SemanticFact} enters the system.
+    \item The \textbf{Validator} checks invariants.
+    \item The \textbf{Importer} or direct insertion sends the fact to
+        each engine via \texttt{insert()}.
+    \item Each engine's \textbf{Storage} layer maps the canonical fact
+        to its internal representation.
+    \item On query, the \textbf{Query Planner} and \textbf{Optimizer}
+        produce an engine-specific physical plan.
+    \item The \textbf{Execution Engine} runs the plan and returns
+        \texttt{SemanticFact} instances.
+    \item The \textbf{Benchmark Runner} collects metrics and verifies
+        that results from all engines are semantically equivalent.
+\end{enumerate}

@@ -1,0 +1,42 @@
+\section{Knowledge Graph}
+\label{sec:knowledge-graph}
+
+The Knowledge Graph engine is a full RDF-style triple store serving as
+the baseline for comparison.
+
+\subsection{Triple Storage}
+\label{sec:kg:storage}
+
+Facts are stored as subject-predicate-object triples using dictionary
+encoding. Three string-to-integer dictionaries map entity URIs, predicate
+URIs, and literal values to compact IDs. The core triple table stores
+(subject\_id, predicate\_id, object\_id, object\_type).
+
+\subsection{Indexes}
+\label{sec:kg:indexes}
+
+Six permutation indexes support fast access:
+\begin{itemize}
+    \item SPO: subject $\to$ predicate $\to$ object
+    \item POS: predicate $\to$ object $\to$ subject
+    \item OSP: object $\to$ subject $\to$ predicate
+    \item SOP: subject $\to$ object $\to$ predicate
+    \item PSO: predicate $\to$ subject $\to$ object
+    \item OPS: object $\to$ predicate $\to$ subject
+\end{itemize}
+Each index is implemented as a nested hash map or sorted structure.
+
+\subsection{Reification}
+\label{sec:kg:reification}
+
+For $n$-ary facts, an intermediate event node is created. Given a fact
+with arity $k$, the KG generates $k + 3$ triples (event type, subject,
+predicate, $k$ objects). Reconstruction requires $k$ joins.
+
+\subsection{Query Engine}
+\label{sec:kg:query}
+
+The KG query engine supports SPARQL-inspired operations: triple pattern
+matching, joins (nested-loop, hash), filters, projections, sorting,
+aggregation, and limits. The query planner translates logical plans into
+physical plans using index selection and join ordering.

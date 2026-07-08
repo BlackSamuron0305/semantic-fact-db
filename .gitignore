@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+
+# LaTeX aux
+paper/*.aux
+paper/*.log
+paper/*.out
+paper/*.bbl
+paper/*.blg
+paper/*.fls
+paper/*.fdb_latexmk
+paper/*.toc
+paper/*.lof
+paper/*.lot
+paper/*.synctex.gz
+paper/figures/*.pdf
+paper/generated/
+
+# Cache
+.hypothesis/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Generated benchmark outputs
+results/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo

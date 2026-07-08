@@ -1,0 +1,55 @@
+% Section 6: Contextual Benchmark Workloads
+% Describes the C1--C10 workload taxonomy and fairness methodology.
+
+\section{Contextual Benchmark Workloads}
+\label{sec:contextual-workloads}
+
+Standard RDF benchmark suites (e.g.,~SP$^2$Bench, LUBM, WatDiv) focus on
+relational-style queries -- selective lookups, multi-way joins, aggregation --
+that map naturally to the relational algebra underlying SPARQL engines.
+SheafDB's advantage lies precisely where the relational model struggles:
+contexts that span multiple facts, high-arity relations that resist
+reification, temporal intervals that require range-indexed access,
+provenance DAGs, and global consistency constraints.
+
+To evaluate these dimensions systematically, we introduce ten contextual
+benchmark workloads (C1--C10), organized into six categories:
+
+\begin{itemize}
+    \item \textbf{Contextual Neighborhood (C1--C2):} Retrieve facts sharing
+    entities with a seed fact within a bounded radius; enumerate paths
+    connecting two entities across the fact graph.
+    \item \textbf{High Arity (C3--C4):} Look up and join facts whose
+    relations carry 3--30 arguments, exercising SheafDB's native tuple
+    store against KG reification overhead.
+    \item \textbf{Temporal (C5--C6):} Interval overlap queries and
+    sliding-window aggregation over facts with valid-time ranges.
+    \item \textbf{Provenance (C7):} Trace derivation chains through
+    source--transformation--confidence DAGs.
+    \item \textbf{Consistency \& Global Sections (C8--C9):} Verify
+    cocycle conditions on overlapping context assignments; construct
+    global sections from compatible local data.
+    \item \textbf{Mixed Flagship (C10):} A multi-stage pipeline combining
+    neighborhood, temporal, provenance, and consistency checks --- the
+    primary evaluation workload for the SheafDB paper.
+\end{itemize}
+
+\subsection{Fairness Contract}
+\label{sec:fairness}
+
+Every workload defines a \emph{semantic question} that both engines answer.
+SheafDB-native operations (neighborhood, consistency, global-section)
+document their KG-equivalent simulation via SPARQL.  Three fairness gates
+are enforced:
+
+\begin{enumerate}
+    \item \textbf{Executability:} Both engines can produce a result (possibly
+    empty) for every workload.
+    \item \textbf{Equivalence:} Result sets are compared as sets of frozen
+    dictionaries; row-wise equality up to column ordering.
+    \item \textbf{Documentation:} Any operator available in one engine but
+    not the other is recorded with a simulation note in the fairness report.
+\end{enumerate}
+
+Section~\ref{sec:results} reports the per-workload speedup and equivalence
+status.

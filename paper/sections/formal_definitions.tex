@@ -1,0 +1,153 @@
+\subsection{Formal Definitions}
+\label{sec:formal_definitions}
+
+\begin{definition}[SemanticFact]
+\label{def:semanticfact}
+A \emph{semantic fact} is a tuple
+\[
+f = (i, s, r, \vec{o}, c, k, m)
+\]
+where:
+\begin{itemize}
+    \item $i \in \mathcal{I}$ is a globally unique identifier.
+    \item $s \in \mathcal{E}$ is the subject entity.
+    \item $r \in \mathcal{R}$ is the relation type.
+    \item $\vec{o} \in \mathcal{V}^*$ is an ordered sequence of values (arity $\operatorname{arity}(f) = |\vec{o}|$).
+    \item $c \in \mathcal{C}$ is the context of validity.
+    \item $k \in [0,1]$ is the confidence.
+    \item $m \in \mathbf{Set}$ is metadata.
+\end{itemize}
+Let $\mathcal{F}$ denote the set of all semantic facts.
+\end{definition}
+
+\begin{definition}[Entity]
+\label{def:entity}
+An \emph{entity} is a distinguished identifier $\varepsilon \in \mathcal{E} \subseteq \mathcal{I}$
+with:
+\begin{itemize}
+    \item A unique identifier $\operatorname{id}(\varepsilon) \in \mathcal{I}$.
+    \item A semantic type $\operatorname{type}(\varepsilon) \in \mathbf{SemanticType}$.
+    \item An optional name $\operatorname{name}(\varepsilon)$.
+    \item Optional attributes $\operatorname{attrs}(\varepsilon) \subseteq \mathcal{V}^*$.
+\end{itemize}
+If $f = (i, s, r, \vec{o}, c, k, m)$ is a fact, then $s \in \mathcal{E}$.
+\end{definition}
+
+\begin{definition}[Relation]
+\label{def:relation}
+A \emph{relation} is a distinguished identifier $\rho \in \mathcal{R} \subseteq \mathcal{I}$
+with:
+\begin{itemize}
+    \item A unique identifier $\operatorname{id}(\rho) \in \mathcal{I}$.
+    \item An arity $\operatorname{arity}(\rho) \geq 0$.
+    \item Slot types $\operatorname{slots}(\rho) \in \mathbf{SemanticType}^*$.
+\end{itemize}
+A fact $f = (i, s, r, \vec{o}, c, k, m)$ is well-typed iff
+$\operatorname{arity}(r) = |\vec{o}|$ and each $\omega_j$ conforms to
+$\operatorname{slots}(r)_j$.
+\end{definition}
+
+\begin{definition}[Context]
+\label{def:context}
+A \emph{context} $c \in \mathcal{C}$ is a node in a finite poset $(\mathcal{C}, \leq)$
+identified by a dot-separated path. The partial order is prefix inclusion:
+$c_1 \leq c_2$ iff $c_2$ is a prefix of $c_1$ (i.e., $c_1$ is more specific).
+The root context $\top$ (``world'') is the unique maximal element:
+$c \leq \top$ for all $c \in \mathcal{C}$.
+The meet $c_1 \wedge c_2$ is the longest common prefix.
+\end{definition}
+
+\begin{definition}[Finite Topological Space]
+\label{def:topology}
+A \emph{finite topological space} is a pair $(X, \mathcal{T})$ where $X$ is a finite set
+and $\mathcal{T} \subseteq \mathcal{P}(X)$ satisfies:
+\begin{enumerate}
+    \item $\emptyset, X \in \mathcal{T}$.
+    \item $U, V \in \mathcal{T} \implies U \cap V \in \mathcal{T}$ (finite intersection).
+    \item $\{U_i\}_{i \in I} \subseteq \mathcal{T} \implies \bigcup_i U_i \in \mathcal{T}$ (arbitrary union).
+\end{enumerate}
+In SheafDB, $X = \mathcal{I}$ (fact identifiers) and $\mathcal{T}$ is generated
+by the Alexandrov topology on $(\mathcal{C}, \leq)$.
+\end{definition}
+
+\begin{definition}[Open Set]
+\label{def:openset}
+An \emph{open set} $U \in \mathcal{T}$ is a subset of $X$ that is declared open.
+In the Alexandrov topology induced by $(\mathcal{C}, \leq)$, every down-set
+$\downarrow c = \{d \in \mathcal{C} \mid d \leq c\}$ is open.
+To each context $c$ we associate $U_c = \{f \in \mathcal{I} \mid \operatorname{context}(f) \leq c\}$.
+Properties: $U_{\top} = X$, $U_{c_1} \cap U_{c_2} = U_{c_1 \wedge c_2}$.
+\end{definition}
+
+\begin{definition}[Neighbourhood]
+\label{def:neighbourhood}
+A \emph{neighbourhood} of $x \in X$ is any $U \in \mathcal{T}$ with $x \in U$.
+The neighbourhood filter is $\mathcal{N}(x) = \{U \in \mathcal{T} \mid x \in U\}$.
+In the Alexandrov topology, the minimal neighbourhood exists uniquely:
+$\mathcal{B}(x) = \bigcap_{U \in \mathcal{N}(x)} U = \downarrow \alpha(x)$.
+\end{definition}
+
+\begin{definition}[Restriction Map]
+\label{def:restriction}
+For $c \leq d$, the \emph{restriction map}
+$\rho_{d,c}: \mathcal{P}(\mathcal{F}_d) \to \mathcal{P}(\mathcal{F}_c)$
+sends facts valid in $d$ to the corresponding facts in sub-context $c$.
+For a single fact $f = (i, s, r, \vec{o}, d, k, m)$:
+\[
+\rho_{d,c}(f) = (i, s, r, \vec{o}\,', c, k, m)
+\]
+where $\vec{o}\,'$ is obtained by dropping object slots not meaningful in $c$.
+Functoriality: $\rho_{c,c} = \operatorname{id}$, $\rho_{e,c} = \rho_{d,c} \circ \rho_{e,d}$.
+\end{definition}
+
+\begin{definition}[Stalk]
+\label{def:stalk}
+The \emph{stalk} of presheaf $F$ at point $x \in X$ is
+$F_x = \varinjlim_{U \in \mathcal{N}(x)} F(U)$,
+the set of germs $[s]_U$ where $[s]_U \sim [t]_V$ iff $\exists W \subseteq U \cap V$
+with $x \in W$ and $s|_W = t|_W$.
+\end{definition}
+
+\begin{definition}[Local Section]
+\label{def:localsection}
+A \emph{local section} is $s \in F(U)$ for a proper open subset $U \subsetneq X$.
+In SheafDB, a local section is a fact whose context $c < \top$.
+\end{definition}
+
+\begin{definition}[Global Section]
+\label{def:globalsection}
+A \emph{global section} is $s \in F(X)$ over the whole space.
+In SheafDB, this is a fact valid in the root context $\top$.
+Computed by collecting local sections, checking compatibility on overlaps,
+and gluing upward until $\top$ is reached.
+\end{definition}
+
+\begin{definition}[Knowledge State]
+\label{def:knowledgestate}
+A \emph{knowledge state} is $\Sigma = (X, F)$ where $X$ is a finite topological space
+of fact identifiers and $F$ is a presheaf on $X$ assigning facts to open sets.
+State transitions: insert $\Sigma \mapsto \Sigma \cup \{f\}$,
+delete $\Sigma \mapsto \Sigma \setminus \{f\}$,
+update $\Sigma \mapsto (\Sigma \setminus \{f\}) \cup \{f'\}$.
+\end{definition}
+
+\begin{definition}[Canonical Query]
+\label{def:canonicalquery}
+A \emph{canonical query} is $Q = (\tau, s, r, \vec{o}, c, k_{\min}, n_{\max})$ where:
+$\tau \in \{\text{FACT}, \text{WALK}, \text{JOIN}, \text{GLUE}\}$ is the query mode,
+$s \in \mathcal{E} \cup \{\ast\}$ is the subject (wildcard $\ast$ matches all),
+$r \in \mathcal{R} \cup \{\ast\}$ is the relation,
+$\vec{o} \in \mathcal{V}^* \cup \{\ast\}$ is the object pattern,
+$c \in \mathcal{C} \cup \{\ast\}$ is the context,
+$k_{\min} \in [0,1]$ is the minimum confidence,
+$n_{\max} \in \mathbb{N}$ is the result limit.
+The denotation $\llbracket Q \rrbracket_\Sigma$ is the set of facts matching $Q$.
+\end{definition}
+
+\begin{definition}[Canonical Result]
+\label{def:canonicalresult}
+A \emph{canonical result} is $R = \llbracket Q \rrbracket_\Sigma$,
+a set of canonical facts. Two results $R_1, R_2$ are equivalent iff
+$|R_1| = |R_2|$ and there exists a bijection $\phi: R_1 \to R_2$ preserving
+all semantic components up to identifier isomorphism.
+\end{definition}

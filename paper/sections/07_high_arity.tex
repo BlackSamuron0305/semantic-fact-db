@@ -1,0 +1,25 @@
+\section{High-Arity Workloads (C3, C4)}
+\label{sec:high_arity}
+
+Relational facts in real-world domains often exceed the binary subject-predicate-object structure that dominates knowledge graphs. In biomedical databases, a drug--target interaction is annotated with dosage, route, study population, and confidence interval, yielding a 6-ary relation. Sensor networks record timestamped multi-channel readings with provenance metadata, routinely producing tuples of arity 12 or higher. Temporal annotations on facts---valid-from, valid-until, recorded-at, source-id---add further dimensions that push practical arities into double digits.
+
+\paragraph{Reification overhead.}
+Standard RDF and property-graph systems encode an $a$-ary fact as $2a+1$ triples via reification or $n$-ary relation patterns. Each of the $a$ role--value pairs requires a separate triple plus the type-assertion triple. Lookup of a single fact therefore requires $O(a)$ edge traversals in the underlying store, and joins across all role--value pairs scale quadratically with arity in pathological cases. This overhead renders high-arity workloads---common in scientific and temporal settings---disproportionately expensive on conventional graph databases.
+
+\paragraph{SheafDB native tuple storage.}
+SheafDB eschews reification entirely. The store's fundamental unit is the typed tuple with schema-native arity up to 30. A fact of arity $a$ occupies exactly $a+1$ contiguous cells (arity tag plus $a$ attribute values), yielding $O(1)$ indexed lookup by position within the tuple and $O(1)$ iteration over all attributes. Bulk import of CSV-style records maps directly to internal tuple pages without intermediate triple expansion.
+
+\paragraph{Experimental setup.}
+Workloads C3 (point-lookup) and C4 (range-scan) are evaluated at arity 3, 5, 8, and 12, each at scale 1K, 10K, 100K, and 1M facts. Both uniformly random and Zipf-distributed attribute values are tested. Latency is wall-clock time averaged over 10 runs after warm-up.
+
+\paragraph{Expected outcomes.}
+SheafDB lookup latency should remain essentially flat across arity ($O(1)$), while KG systems degrade linearly ($O(a)$) due to the $2a+1$ triple expansion. The gap widens with scale: at arity 12 and 1M facts, SheafDB is projected to outperform reification-based stores by a factor proportional to $a$. Range-scan workloads further benefit from SheafDB's contiguous tuple layout, which avoids scatter-read across $2a+1$ disjoint triple locations.
+
+\input{tables/high_arity_results.tex}
+
+\begin{figure}
+  \centering
+  \includegraphics{figures/high_arity_scaling.pdf}
+  \caption{Latency vs.\ arity at 1M-fact scale for point-lookup (C3) and range-scan (C4) workloads. SheafDB exhibits $O(1)$ scaling; reification-based systems exhibit $O(a)$.}
+  \label{fig:high_arity_scaling}
+\end{figure}

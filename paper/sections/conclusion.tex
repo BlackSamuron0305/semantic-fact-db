@@ -1,0 +1,27 @@
+\section{Conclusion}
+\label{sec:conclusion}
+
+We have presented a sheaf-theoretic approach to semantic fact storage and
+querying. Our results demonstrate that sheaf-based representations reduce
+join complexity for contextual queries at the cost of increased storage
+overhead for highly interconnected facts.
+
+The formal model---based on presheaves over a finite poset of contexts with
+restriction maps and gluing---provides a rigorous foundation for contextual
+knowledge representation. The implementation demonstrates that this model
+can be realized as a working database system.
+
+Our benchmark evaluation confirms that:
+\begin{enumerate}
+    \item SheafDB is competitive with KG for most query types.
+    \item SheafDB excels at contextual queries with high-arity facts.
+    \item The KG representation is preferred for simple, highly interconnected
+          binary relations.
+    \item Semantic equivalence between representations is provable and
+          verifiable.
+\end{enumerate}
+
+The sheaf representation is preferred when queries are context-scoped and
+facts have high arity. The traditional KG representation is preferred for
+simple, highly interconnected binary relations. A hybrid approach combining
+both representations may offer the best of both worlds.

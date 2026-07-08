@@ -1,0 +1,51 @@
+\subsection{KG Storage Model}
+
+The Knowledge Graph stores triples using dictionary encoding and SQLite persistence.
+
+\subsubsection{Dictionary Encoding}
+
+String values are mapped to compact integer IDs to reduce storage overhead and enable fast comparison:
+
+\begin{itemize}
+    \item \textbf{Entity dictionary}: $(entity\_id : \mathbb{N}) \mapsto uri : \texttt{str}$
+    \item \textbf{Predicate dictionary}: $(pred\_id : \mathbb{N}) \mapsto uri : \texttt{str}$
+    \item \textbf{Literal table}: $(lit\_id : \mathbb{N}) \mapsto (value : \texttt{str}, datatype : \texttt{str})$
+\end{itemize}
+
+\subsubsection{Triple Storage}
+
+The core storage schema is:
+
+\begin{verbatim}
+CREATE TABLE triples (
+    subject    INTEGER NOT NULL,
+    predicate  INTEGER NOT NULL,
+    object     INTEGER NOT NULL,
+    obj_type   TEXT NOT NULL,  -- 'entity' or 'literal'
+    ev_id      INTEGER DEFAULT 0
+);
+\end{verbatim}
+
+Three primary indexes are maintained:
+\begin{verbatim}
+CREATE INDEX idx_spo ON triples(subject, predicate, object);
+CREATE INDEX idx_pos ON triples(predicate, object, subject);
+CREATE INDEX idx_ops ON triples(object, predicate, subject);
+\end{verbatim}
+
+\subsubsection{Reification Schema}
+
+For $n$-ary facts, reification connects roles and values through an event node:
+
+\begin{verbatim}
+CREATE TABLE reification (
+    ev_id   INTEGER NOT NULL,  -- event node ID
+    pred_id INTEGER NOT NULL,  -- role predicate ID
+    obj_id  INTEGER NOT NULL,  -- role value ID (entity or literal)
+    role    TEXT NOT NULL       -- role name
+);
+\end{verbatim}
+
+\subsubsection{Persistence}
+
+All data is persisted to SQLite with WAL journaling for concurrent read access. On load, all indexes are automatically rebuilt. Export produces N-Triples format; import parses N-Triples back into the internal representation.

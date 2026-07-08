@@ -1,0 +1,127 @@
+\section{Complexity Analysis}
+\label{sec:complexity}
+
+All analyses assume the standard RAM model with uniform cost for basic
+operations (hash lookup, pointer dereference, arithmetic).
+
+\paragraph{Notation:}
+$N$ = number of facts,
+$k$ = fact arity,
+$|\mathcal{C}|$ = number of contexts,
+$d$ = context depth in the poset,
+$T$ = number of KG triples,
+$R$ = number of restriction maps,
+$n$ = result size.
+
+\subsection{Fact Construction and Modification}
+\label{sec:complexity:modification}
+
+Constructing a fact requires building the object tuple:
+time $O(k)$, space $O(k + m)$ where $m$ is metadata size.
+
+\begin{table}[ht]
+\centering
+\caption{Insertion and deletion complexity.}
+\label{tab:complexity:modification}
+\begin{tabular}{@{}lcc@{}}
+\toprule
+Operation & Knowledge Graph & Sheaf Database \\
+\midrule
+Insert & $O(k \log T)$ & $O(d)$ amortized, $O(|\mathcal{C}|)$ worst \\
+Delete & $O(k \log T)$ & $O(|\mathcal{C}|)$ worst \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{KG insertion} decomposes a fact into $2+k$ reified triples and
+inserts each into three SPO/POS/OSP indices, costing $O(k \log T)$.
+
+\paragraph{Sheaf insertion} stores the fact in its context section ($O(1)$ hash)
+and registers it with open sets. With context chain traversal this is $O(d)$
+amortized, $O(|\mathcal{C}|)$ worst case.
+
+\subsection{Query Operations}
+\label{sec:complexity:query}
+
+\begin{table}[ht]
+\centering
+\caption{Query complexity comparison.}
+\label{tab:complexity:query}
+\begin{tabular}{@{}lcc@{}}
+\toprule
+Operation & Knowledge Graph & Sheaf Database \\
+\midrule
+Context Lookup & $O(\log T + n)$ & $O(\log |\mathcal{C}| + n)$ \\
+Restriction & N/A (triple-oriented) & $O(k)$ \\
+Global Sections & N/A & $O(|\mathcal{C}| \cdot N^2)$ worst, $O(N \log |\mathcal{C}|)$ expected \\
+Neighbourhood Search & $O(\log T + n)$ & $O(d + n)$ \\
+Temporal Search & $O(\log T + n)$ & $O(N)$ without index, $O(\log N + n)$ with index \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Context Lookup.} KG requires an index scan; SheafDB performs a direct
+open set lookup with context-to-open-set index.
+
+\paragraph{Restriction.} Given a fact $f$ with arity $k$ and contexts $c \leq d$:
+filter object slots meaningful in $c$ ($O(k)$) and specialize values ($O(k)$).
+Total $O(k)$, independent of $N$.
+
+\paragraph{Global Sections (Gluing).} The algorithm processes the context poset
+bottom-up:
+\begin{enumerate}
+    \item Leaf collection: scan all facts at minimal contexts --- $O(N)$.
+    \item Bottom-up gluing: for each non-leaf context $c$, check all
+          sub-context pairs. Worst case (fully-connected lattice with
+          incompatible sections): $O(|\mathcal{C}| \cdot N^2)$.
+    \item Expected case (tree-structured contexts, most sections compatible):
+          $O(N \log |\mathcal{C}|)$.
+\end{enumerate}
+
+\paragraph{Neighbourhood Search.} Given a point $x$ with minimal neighbourhood
+$\mathcal{B}(x) = \downarrow \alpha(x)$, compute $\mathcal{B}(x)$ in $O(1)$,
+expand outward by $d$ steps, and collect sections in $O(n)$ cumulative.
+Total: $O(d + n)$.
+
+\paragraph{Temporal Search.} Without a temporal index, full scan costs $O(N)$.
+With an interval-tree index: $O(\log N + n)$.
+
+\subsection{Space Complexity}
+\label{sec:complexity:space}
+
+\begin{table}[ht]
+\centering
+\caption{Space complexity comparison.}
+\label{tab:complexity:space}
+\begin{tabular}{@{}lcc@{}}
+\toprule
+Component & KG & Sheaf Database \\
+\midrule
+Per fact & $O(k \cdot 3)$ triples $+$ indices & $O(1)$ section $+$ $O(d)$ restriction entries \\
+Context poset & $O(1)$ (not stored) & $O(|\mathcal{C}|^2)$ for topology \\
+Restriction maps & N/A & $O(R) \leq O(|\mathcal{C}| \cdot N)$ \\
+Indices & $O(T)$ via SPO/POS/OSP & $O(N + |\mathcal{C}|)$ via context hash \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+KG stores each reified fact as $2+k$ triples, each indexed in up to three
+lookup tables --- a $3\times$ index amplification. SheafDB stores each fact once
+in its context section plus $O(d)$ restriction entries for the ancestors;
+context indexing adds $O(|\mathcal{C}|^2)$ for the topology and
+$O(N + |\mathcal{C}|)$ for the context hash.
+
+\subsection{Empirical Hypotheses}
+\label{sec:complexity:hypotheses}
+
+These bounds are tested empirically by the benchmark framework:
+
+\begin{enumerate}
+    \item SheafDB insertion is $O(d)$ vs.\ KG's $O(k \log T)$ for contexts
+          of depth $d$.
+    \item SheafDB contextual queries are faster than KG pattern queries for
+          highly nested contexts.
+    \item KG joins outperform SheafDB gluing for non-contextual queries.
+    \item The expected-case $O(N \log |\mathcal{C}|)$ gluing complexity holds
+          for tree-structured context hierarchies.
+\end{enumerate}

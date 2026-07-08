@@ -1,0 +1,40 @@
+\section{Related Work}
+\label{sec:related-work}
+
+The Semantic Web vision~\cite{bernerslee2001semantic} popularised the use of
+knowledge graphs for representing structured information on the web.
+RDF~\cite{manola2004rdf} and SPARQL~\cite{sparql2013} form the backbone
+of this ecosystem, enabling interlinked data across domains.
+Property graphs~\cite{angles2017property} extend this model with
+edge properties and multiple edge types, as implemented by
+Neo4j~\cite{neotechnology2024neo4j}, Amazon Neptune, and ArangoDB.
+
+Despite their widespread adoption, graph-based representations face
+fundamental limitations when handling $n$-ary relations. Reification---the
+standard technique for representing $n$-ary facts in RDF---introduces
+intermediate nodes and increases the join complexity of queries by a
+factor of $O(k)$ for a $k$-ary fact~\cite{angles2008survey}.
+
+Alternative mathematical frameworks have been proposed to address these
+limitations. Category theory provides a natural language for describing
+structural relationships~\cite{maclane1992sheaves}. Sheaf theory, in
+particular, has been applied to distributed
+computing, database
+theory~\cite{patterson2022sheaf}, and data
+fusion~\cite{robinson2020sheaf}. Hypergraphs~\cite{gallo1993hypergraph}
+and simplicial complexes~\cite{edelsbrunner2010computational} offer
+alternative models for higher-order relationships.
+
+Formal Concept Analysis (FCA)~\cite{ganter1999formal} provides a lattice-theoretic
+approach to knowledge representation that shares structural similarities
+with our context poset. However, FCA does not provide the restriction maps
+or gluing operations that are central to sheaf theory.
+
+Topological Data Analysis (TDA)~\cite{carlsson2009topology} applies
+algebraic topology to data analysis. While TDA focuses on extracting
+topological features from point clouds, we apply topological structures
+as a native data model rather than an analytical tool.
+
+To the best of our knowledge, no prior work has proposed a complete
+sheaf-based database system for semantic facts with an implementation,
+benchmark evaluation, and formal correctness proofs against a KG baseline.

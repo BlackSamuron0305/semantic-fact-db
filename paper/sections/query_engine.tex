@@ -1,0 +1,36 @@
+\section{Query Engine}
+\label{sec:query-engine}
+
+Both storage engines expose a common query interface. The query pipeline
+consists of parsing, planning, optimization, execution, and
+canonicalization.
+
+\subsection{Language}
+\label{sec:query:language}
+
+The query language supports five operation types:
+\begin{itemize}
+    \item \textbf{FACT}: retrieve facts matching a pattern.
+    \item \textbf{WALK}: traverse relations from an entity.
+    \item \textbf{JOIN}: multi-way join across relations.
+    \item \textbf{GLUE}: reconstruct global sections from local sections.
+\end{itemize}
+
+\subsection{Planning and Optimization}
+\label{sec:query:planner}
+
+The logical plan is a tree of operators (Scan, Filter, Join, Project,
+Aggregate, Sort, Limit). The optimizer applies:
+\begin{itemize}
+    \item Predicate pushdown: evaluate filters as early as possible.
+    \item Join reordering: order joins by estimated selectivity.
+    \item Index selection: choose the most selective index for each scan.
+    \item Dead operator elimination: remove unused projections.
+\end{itemize}
+
+\subsection{Physical Execution}
+\label{sec:query:execution}
+
+Each engine translates the optimized logical plan into engine-specific
+physical operators. The KG engine uses index seeks and nested-loop joins.
+The Sheaf engine uses context lookups and restriction map traversals.

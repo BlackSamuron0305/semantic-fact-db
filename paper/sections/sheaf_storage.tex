@@ -1,0 +1,41 @@
+% Sheaf storage architecture
+
+\subsection{Sheaf Storage Architecture}
+
+The storage hierarchy follows the sheaf structure directly:
+
+\begin{enumerate}
+    \item \textbf{Topological Space}: The finite topology $(X, \tau)$ is stored as a set of named OpenSet objects, each containing a frozenset of point IDs (SemanticFact identifiers). The empty set $\emptyset$ and universal set $\mathbb{U}$ (representing the entire space) are always present.
+
+    \item \textbf{Stalks}: For each point $x \in X$, the stalk $F_x = \varinjlim_{U \ni x} F(U)$ is computed as the direct limit over all open neighborhoods of $x$. In practice, we cache the stalk as the set of all LocalSections whose fact ID is $x$, accessible from any open set containing $x$.
+
+    \item \textbf{LocalSections}: Each LocalSection stores a complete SemanticFact paired with its open set name. A fact may appear in multiple LocalSections (one per open set it belongs to), but each occurrence stores the \emph{complete} fact — no decomposition into triples.
+
+    \item \textbf{GlobalSections}: Computed via sheaf gluing when a fact appears in overlapping open sets with compatible restrictions. The gluing algorithm iterates over all pairs $(U, V)$ of open sets, checks for shared points, and verifies that the two sections agree on the overlap.
+\end{enumerate}
+
+\subsubsection{Persistence}
+
+SQLite provides the backing store with three tables:
+
+\begin{itemize}
+    \item \texttt{sections}: Stores serialized LocalSections as JSON blobs, indexed by fact\_id, open\_set\_name, context, subject, relation, provenance\_source, and temporal\_year.
+    \item \texttt{topology\_metadata}: Key-value store for topology parameters.
+    \item \texttt{restriction\_maps}: Tracks restriction map application counts for performance analysis.
+\end{itemize}
+
+\subsubsection{Indexes}
+
+Eight indexes accelerate query execution:
+
+\begin{itemize}
+    \item \textbf{OpenSetIndex}: Maps open set names to fact IDs (primary access path)
+    \item \textbf{StalkIndex}: Maps point IDs to cached stalk objects
+    \item \textbf{RestrictionIndex}: Tracks restriction map metadata (application count, timing)
+    \item \textbf{ContextIndex}: Maps context strings to fact IDs
+    \item \textbf{NeighborhoodIndex}: Maps entity references to fact IDs (entity adjacency queries)
+    \item \textbf{TemporalIndex}: Maps years to fact IDs
+    \item \textbf{ProvenanceIndex}: Maps provenance sources to fact IDs
+    \item \textbf{GlobalSectionCache}: Caches computed global sections to avoid recomputation
+\end{itemize}
+\endinput

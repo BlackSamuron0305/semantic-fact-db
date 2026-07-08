@@ -1,0 +1,48 @@
+\section{Future Work}
+\label{sec:future}
+
+\subsection{Distributed SheafDB}
+\label{sec:future:distributed}
+
+Extending SheafDB to distributed execution across multiple nodes would
+enable scaling to larger datasets. The sheaf structure naturally
+partitions by context subtree, suggesting a distributed design where
+each node owns a subset of contexts and communicates via restriction
+maps.
+
+\subsection{Parallel Query Execution}
+\label{sec:future:parallel}
+
+Global section computation and gluing are embarrassingly parallel at the
+fact level. Future work could exploit multi-threading and GPU acceleration
+for these operations.
+
+\subsection{Incremental Restriction Maps}
+\label{sec:future:incremental}
+
+Currently, restriction maps are computed on demand. Caching frequently
+used restrictions and incrementally updating the cache on fact insertion
+would improve query performance.
+
+\subsection{Dynamic Topologies}
+\label{sec:future:dynamic}
+
+The context poset is currently static. Supporting dynamic insertion and
+deletion of contexts would enable applications where the scoping structure
+evolves over time.
+
+\subsection{Compression}
+\label{sec:future:compression}
+
+Context-indexed storage admits specialized compression schemes:
+sections sharing the same context can be packed and encoded together,
+reducing the storage overhead identified in the evaluation.
+
+\subsection{Hybrid Systems}
+\label{sec:future:hybrid}
+
+A hybrid system that dynamically selects between KG and sheaf representations
+based on query patterns could combine the strengths of both approaches.
+The optimizer could decide at query time which engine to use, or data
+could be replicated across both representations with automatic
+synchronization.

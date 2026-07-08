@@ -1,0 +1,54 @@
+\section{Discussion}
+\label{sec:discussion}
+
+\subsection{Interpretation of Results}
+\label{sec:discussion:interpretation}
+
+The experimental results confirm our three hypotheses.
+SheafDB outperforms the KG baseline on contextual queries because
+context-indexed section storage avoids the join overhead inherent in
+reified triple representations. For non-contextual queries involving
+highly interconnected entities, the KG's triple indexes provide more
+efficient access patterns.
+
+\subsection{When SheafDB Excels}
+\label{sec:discussion:sheaf-wins}
+
+SheafDB is preferred when:
+\begin{itemize}
+    \item Queries are scoped to a specific context or context subtree.
+    \item Facts have high arity ($k \geq 4$), where reification overhead
+          becomes significant.
+    \item Frequent global reconstruction from local sections is required.
+\end{itemize}
+
+\subsection{When KG Excels}
+\label{sec:discussion:kg-wins}
+
+The KG representation is preferred when:
+\begin{itemize}
+    \item Facts are predominantly binary relations.
+    \item The graph is dense with many interconnections between entities.
+    \item The dataset is flat (single context), providing no locality benefit.
+\end{itemize}
+
+\subsection{Threats to Validity}
+\label{sec:discussion:threats}
+
+\begin{itemize}
+    \item \textbf{Implementation bias}: Both engines were implemented by the
+          same authors. The KG baseline may not reflect the performance of
+          mature systems like Jena or Virtuoso.
+    \item \textbf{Dataset bias}: Synthetic datasets may not capture all
+          characteristics of real-world knowledge graphs.
+    \item \textbf{Query bias}: The benchmark query set may favor one
+          representation over another.
+\end{itemize}
+
+\subsection{Negative Results}
+\label{sec:discussion:negative}
+
+SheafDB's storage overhead grows with the number of cross-context references.
+For datasets where most facts reference entities in multiple contexts, the
+restriction map index approaches the KG's triple index in size, eliminating
+the storage advantage.

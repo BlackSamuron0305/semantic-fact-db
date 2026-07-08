@@ -1,0 +1,24 @@
+% Restriction maps
+
+\subsection{Restriction Maps}
+
+Restriction maps are the fundamental operation in the sheaf database. Given open sets $V \subseteq U$, the restriction map $\rho_{U,V}: F(U) \to F(V)$ sends a section $s \in F(U)$ to its restriction $s|_V \in F(V)$.
+
+\begin{definition}[Restriction Map]
+For open sets $U, V \in \tau$ with $V \subseteq U$, the restriction $\rho_{U,V}$ maps each LocalSection $s \in F(U)$ to the LocalSection $s' \in F(V)$ where $s'$ contains the same SemanticFact but scoped to the smaller open set $V$. If no section exists for a fact in $V$, the restriction is undefined for that fact.
+\end{definition}
+
+Restriction maps compose: for $W \subseteq V \subseteq U$, we have $\rho_{V,W} \circ \rho_{U,V} = \rho_{U,W}$. This compositionality ensures that querying through multiple levels of context hierarchy produces consistent results.
+
+\subsubsection{Context Restriction}
+
+Context restrictions map facts from a more specific context to a more general one. For example, restricting from context \texttt{world.2024.events} to \texttt{world.2024} discards the most specific context segment while preserving the fact's identity and all other attributes.
+
+\subsubsection{Temporal Restriction}
+
+Temporal restrictions narrow the temporal scope of a query. Given a fact with temporal span $[t_{\text{start}}, t_{\text{end}}]$, restricting to a sub-interval preserves the fact if its span overlaps the target interval.
+
+\subsubsection{Restriction Graph}
+
+The restriction graph $G = (V, E)$ is a directed acyclic graph where vertices are open set names and edges represent valid restriction directions ($U \to V$ iff $V \subseteq U$). The graph supports path existence queries to determine whether one open set can be reached from another through a chain of restrictions.
+\endinput

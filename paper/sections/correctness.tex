@@ -1,0 +1,117 @@
+\section{Correctness}
+\label{sec:correctness}
+
+A knowledge state $\Sigma$ is \emph{correct} if its observable behaviour matches
+the formal specification. Concretely:
+\begin{enumerate}
+    \item Every query result $\llbracket Q \rrbracket_\Sigma$ contains exactly
+          the facts satisfying $Q$ according to denotational semantics.
+    \item State transitions preserve the invariants of the semantic fact model.
+    \item The sheaf axioms (locality and gluing) are satisfied at all times.
+    \item Two storage engines produce equivalent results for identical inputs.
+\end{enumerate}
+
+\subsection{Lossless Mapping}
+\label{sec:correctness:lossless}
+
+\begin{definition}[Lossless Mapping]
+\label{def:lossless}
+A mapping $\phi: \mathcal{F}_A \to \mathcal{F}_B$ is \emph{lossless} iff there
+exists a reverse mapping $\psi: \mathcal{F}_B \to \mathcal{F}_A$ such that
+$\psi(\phi(f)) = f$ for all $f \in \mathcal{F}_A$.
+\end{definition}
+
+Three mappings are required:
+\begin{itemize}
+    \item $\phi_{\mathrm{KG}}$: generic fact $\to$ KG triple representation (reification).
+    \item $\phi_{\mathrm{Sheaf}}$: generic fact $\to$ sheaf section.
+    \item $\phi_{\mathrm{Canonical}}$: generic fact $\to$ canonical fact.
+\end{itemize}
+
+All three must be lossless and their compositions must commute:
+\[
+\phi_{\mathrm{Canonical}} \circ \psi_{\mathrm{KG}} \circ \phi_{\mathrm{KG}}
+= \phi_{\mathrm{Canonical}}
+= \phi_{\mathrm{Canonical}} \circ \psi_{\mathrm{Sheaf}} \circ \phi_{\mathrm{Sheaf}}.
+\]
+
+\subsection{Semantic Equivalence}
+\label{sec:correctness:equivalence}
+
+\begin{definition}[Semantic Equivalence]
+\label{def:semanticequiv}
+Two knowledge states $\Sigma_1$ and $\Sigma_2$ are \emph{semantically equivalent}
+iff they produce isomorphic canonical models:
+\[
+\mathfrak{F}(\Sigma_1) \cong \mathfrak{F}(\Sigma_2)
+\]
+where $\cong$ denotes equality up to identifier bijection preserving all
+semantic relationships.
+\end{definition}
+
+For any sequence of insert operations applied identically to both KG and Sheaf:
+\[
+\mathfrak{F}(\Sigma_{\mathrm{KG}}) \cong \mathfrak{F}(\Sigma_{\mathrm{Sheaf}}).
+\]
+
+\subsection{Referential Integrity}
+\label{sec:correctness:integrity}
+
+\begin{definition}[Referential Integrity]
+\label{def:refintegrity}
+$\Sigma$ satisfies \emph{referential integrity} iff for every fact $f \in \Sigma$:
+\begin{enumerate}
+    \item $\operatorname{subject}(f) \in \mathcal{E}_\Sigma$ (subject exists).
+    \item If object $\omega_j$ is a reference (not a literal), $\omega_j \in \mathcal{E}_\Sigma$.
+    \item $\operatorname{relation}(f) \in \mathcal{R}_\Sigma$ (relation type exists).
+\end{enumerate}
+\end{definition}
+
+\subsection{Consistency (Sheaf Axioms)}
+\label{sec:correctness:consistency}
+
+\begin{definition}[Consistent Knowledge State]
+\label{def:consistency}
+A knowledge state $\Sigma$ with presheaf $F$ is \emph{consistent} iff $F$
+satisfies the sheaf axioms of locality (Definition~\ref{thm:locality})
+and gluing (Definition~\ref{thm:gluing}).
+\end{definition}
+
+After every state transition, the gluing check verifies that no pair of sections
+in overlapping contexts disagree. A \texttt{ConsistencyError} is raised when
+incompatible sections are detected.
+
+\subsection{Determinism}
+\label{sec:correctness:determinism}
+
+\begin{definition}[Deterministic Query Execution]
+\label{def:determinism}
+Query execution is \emph{deterministic} iff the same query $Q$ against the
+same knowledge state $\Sigma$ always returns the same result
+$\llbracket Q \rrbracket_\Sigma$, independent of execution order, caching,
+parallelism, or query history:
+\[
+\operatorname{ExecuteQuery}(Q, \Sigma) = \operatorname{ExecuteQuery}(Q, \Sigma)
+\]
+for any two invocations with identical arguments.
+\end{definition}
+
+\subsection{Summary}
+\label{sec:correctness:summary}
+
+\begin{table}[ht]
+\centering
+\caption{Correctness conditions summary.}
+\label{tab:correctness}
+\begin{tabular}{@{}lll@{}}
+\toprule
+Condition & Formal Criterion & Failure Consequence \\
+\midrule
+Lossless Mapping & $\psi(\phi(f)) = f$ & Data loss \\
+Semantic Equivalence & $\mathfrak{F}(\Sigma_1) \cong \mathfrak{F}(\Sigma_2)$ & Incorrect results \\
+Referential Integrity & $\forall f: \operatorname{refs}(f) \subseteq \mathcal{E}_\Sigma$ & Orphan references \\
+Consistency (Sheaf) & Locality + Gluing & Contradictory knowledge \\
+Determinism & $Q(\Sigma) = Q(\Sigma)$ & Non-reproducible results \\
+\bottomrule
+\end{tabular}
+\end{table}

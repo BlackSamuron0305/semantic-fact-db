@@ -1,0 +1,23 @@
+% Sheaf model for semantic facts
+
+\subsection{Sheaf Model}
+
+We model the semantic fact database as a sheaf over a finite topological space. 
+Let $(X, \tau)$ be a finite topological space where $X$ is a finite set of points (SemanticFact identifiers) and $\tau \subseteq \mathcal{P}(X)$ is a collection of open subsets closed under finite intersection and arbitrary union.
+
+\begin{definition}[Sheaf of Semantic Facts]
+A presheaf $F: \tau^{\text{op}} \to \mathbf{Set}$ assigns to each open set $U \in \tau$ the set $F(U)$ of LocalSections (SemanticFacts) defined on $U$, and to each inclusion $V \subseteq U$ a restriction map $\rho_{U,V}: F(U) \to F(V)$. The sheaf condition requires that for any open cover $\{U_i\}$ of $U$ with compatible sections $s_i \in F(U_i)$, there exists a unique $s \in F(U)$ such that $\rho_{U,U_i}(s) = s_i$ for all $i$.
+\end{definition}
+
+Each open set in $\tau$ groups facts by a shared semantic property. We define five primary types of open sets:
+
+\begin{itemize}
+    \item \textbf{Event sets}: $U_{\text{event}(f)} = \{f\}$ — singleton containing exactly one fact
+    \item \textbf{Entity sets}: $U_{\text{entity}(e)} = \{f \in X \mid \text{subject}(f) = e \lor \text{references}(f, e)\}$ — all facts mentioning entity $e$
+    \item \textbf{Temporal sets}: $U_{\text{temporal}(y)} = \{f \in X \mid \text{year}(f) = y\}$ — facts from year $y$
+    \item \textbf{Context sets}: $U_{\text{context}(c)} = \{f \in X \mid f \text{ is in context } c\}$ — facts scoped to context $c$
+    \item \textbf{Provenance sets}: $U_{\text{prov}(s)} = \{f \in X \mid \text{source}(f) = s\}$ — facts from source $s$
+\end{itemize}
+
+The topology $\tau$ is the smallest collection containing these sets closed under finite intersection. This ensures that the intersection of any two open sets (e.g., all facts about entity $e$ in year $y$) is itself an open set.
+\endinput

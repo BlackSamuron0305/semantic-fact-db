@@ -1,0 +1,45 @@
+\section{Motivation}
+\label{sec:motivation}
+
+\subsection{Limitations of Triple-Based Representations}
+\label{sec:motivation:triples}
+
+Standard knowledge graphs decompose all facts into subject-predicate-object
+triples. While this uniform representation simplifies storage and querying
+for binary relations, it introduces significant overhead for $n$-ary
+relations such as ``Alice sold a car to Bob for \$20,000 on 2024-01-15.''
+This fact has arity $k = 4$ (buyer, seller, object, price, date) and
+requires reification into $k + 2$ triples~\cite{manola2004rdf}.
+
+The consequences include:
+\begin{itemize}
+    \item \textbf{Join explosion:} Reconstructing the original fact requires
+          $k$ joins, each with cost proportional to the index size.
+    \item \textbf{Storage amplification:} Each $n$-ary fact generates
+          $n+3$ triples instead of a single record.
+    \item \textbf{Loss of context:} The context of a fact (its scope of
+          validity) is not a first-class concept in the triple model.
+\end{itemize}
+
+\subsection{The Case for Sheaf Theory}
+\label{sec:motivation:sheaf}
+
+Sheaf theory addresses these limitations by providing:
+\begin{itemize}
+    \item \textbf{First-class $n$-ary relations:} A fact with arity $k$
+          is stored as a single section, not decomposed.
+    \item \textbf{Native context support:} The poset of contexts models
+          scoping directly.
+    \item \textbf{Locality:} Queries within a single context examine only
+          that context's sections.
+    \item \textbf{Gluing:} Global facts can be reconstructed from compatible
+          local sections.
+\end{itemize}
+
+\subsection{Research Gap}
+\label{sec:motivation:gap}
+
+While sheaf theory has been applied to distributed computing, data fusion,
+and sensor networks~\cite{robinson2020sheaf}, no prior work has built a
+complete database system around sheaf-theoretic principles and evaluated it
+against a traditional KG baseline on realistic workloads.

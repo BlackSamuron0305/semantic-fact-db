@@ -1,0 +1,131 @@
+\subsection{Mathematical Foundations}
+\label{sec:math}
+
+We present the mathematical structures underlying the Semantic Fact Database (SFDB).
+All definitions are standard; we adapt them to the finite, discrete setting of
+knowledge representation.
+
+\subsubsection{Partially Ordered Set of Contexts}
+\label{sec:poset}
+
+Let \((C, \leq)\) be a finite partially ordered set (poset) of \emph{contexts}.
+Each context \(c \in C\) is a string of the form \(s_1.s_2.\cdots.s_k\) representing
+a semantic scope.  The ordering is defined by prefix inclusion:
+\[
+c_1 \leq c_2 \iff \text{\(c_1\) is a prefix of \(c_2\) or \(c_1 = c_2\)}.
+\]
+The root context \(c_0 = \text{``world''}\) is the unique maximal element.
+Sub-contexts refine the scope: for example,
+\[
+c_0.\text{``2024''} < c_0
+\]
+restricts to the year 2024.  The meet \(c_1 \land c_2\) is the longest
+common prefix; the join \(c_1 \lor c_2\) is the shortest common super-context
+(if one exists).
+
+This poset carries the \emph{Alexandrov topology},
+where open sets are upward-closed subsets: \(U \subseteq C\) is open iff
+\(c \in U\) and \(c \leq c'\) implies \(c' \in U\).  In our setting, an open set
+corresponds to a \emph{scope of validity}: if a fact is valid in context \(c\),
+it is also valid in every sub-context (more specific scope) of \(c\).
+
+\subsubsection{Presheaf of Facts}
+\label{sec:presheaf}
+
+\begin{definition}[Presheaf]
+\label{def:presheaf}
+A \emph{presheaf} \(P: C^{\mathrm{op}} \to \mathbf{Set}\) assigns:
+\begin{itemize}
+    \item To each context \(c \in C\), a set \(P(c)\) of \emph{sections}
+          (semantic facts valid in \(c\)).
+    \item To each pair \(c_1 \leq c_2\), a \emph{restriction map}
+          \(\rho_{c_2,c_1}: P(c_2) \to P(c_1)\).
+\end{itemize}
+These satisfy functoriality:
+\[
+\rho_{c,c} = \mathrm{id}_{P(c)},
+\qquad
+\rho_{c_3,c_1} = \rho_{c_2,c_1} \circ \rho_{c_3,c_2}
+\]
+for all \(c_1 \leq c_2 \leq c_3\).
+\end{definition}
+
+Each section \(s \in P(c)\) is a canonical \textsc{SemanticFact} (Definition~\ref{def:semanticfact}).
+The restriction map \(\rho_{c_2,c_1}\) returns the same fact unchanged when
+\(c_1 \leq c_2\); this is well-defined because a fact valid in a broader context
+remains valid in any sub-context.  Restriction is therefore a logical view,
+not a data copy.
+
+\subsubsection{Sheaf Condition}
+\label{sec:sheaf}
+
+\begin{definition}[Sheaf]
+\label{def:sheaf}
+A presheaf \(P\) on \((C, \leq)\) is a \emph{sheaf} if for every context
+\(c \in C\) and every cover \(\{c_i\}_{i \in I}\) (i.e., a set of sub-contexts
+whose join is \(c\)), the following two conditions hold:
+\begin{enumerate}
+    \item \textbf{Locality}: If \(s, t \in P(c)\) and
+          \(\rho_{c,c_i}(s) = \rho_{c,c_i}(t)\) for all \(i \in I\),
+          then \(s = t\).
+    \item \textbf{Gluing}: If \(s_i \in P(c_i)\) are sections that agree on
+          overlaps, i.e.,
+          \[
+          \rho_{c_i,c_i \land c_j}(s_i) = \rho_{c_j,c_i \land c_j}(s_j)
+          \]
+          for all \(i, j \in I\), then there exists a unique
+          \(s \in P(c)\) such that \(\rho_{c,c_i}(s) = s_i\) for all \(i\).
+\end{enumerate}
+\end{definition}
+
+In our finite poset setting, the locality condition is satisfied trivially:
+since restriction is the identity (or undefined), equality in all sub-contexts
+implies equality in the parent context.  The gluing condition is satisfied
+whenever the sections \(s_i\) are compatible (no conflicting values for the
+same identifier).  In practice, gluing failure indicates a data integrity
+violation.
+
+\subsubsection{Stalks and Germs}
+\label{sec:stalks}
+
+\begin{definition}[Stalk]
+\label{def:stalk}
+The \emph{stalk} of a presheaf \(P\) at a context \(c \in C\) is the
+direct limit:
+\[
+P_c = \varinjlim_{c' \geq c} P(c'),
+\]
+taken over all super-contexts \(c'\) of \(c\).  Elements of \(P_c\) are
+called \emph{germs}; two sections represent the same germ if they agree on
+some common sub-context.
+\end{definition}
+
+In the implementation, stalks are computed lazily: for a given context \(c\),
+we collect all sections whose context is a sub-context of \(c\) (i.e., all
+facts valid in \(c\) or a more specific scope).  No explicit direct limit
+construction is needed because the presheaf is separated (the locality
+condition holds) and restriction is trivial.
+
+\subsubsection{Global Sections}
+\label{sec:global}
+
+\begin{definition}[Global Section]
+\label{def:globalsection}
+A \emph{global section} of \(P\) is an element of \(P(c_0)\), the set of
+sections at the root context.  Equivalently, a global section is a consistent
+assignment of a fact to every context in \(C\) that respects all restriction
+maps.
+\end{definition}
+
+Global sections correspond to facts that hold in all contexts.  In practice,
+a global section is computed by gluing compatible local sections from the
+entire poset.  If the gluing condition fails (incompatible sections), no
+global section exists for that fact.
+
+\subsubsection{Simplicial Set Perspective}
+\label{sec:simplicial}
+
+For completeness, we note an alternative categorical model: a simplicial set
+approach where semantic facts are stored as simplices in a simplicial complex.
+This model is not the primary representation but provides a useful comparison
+point.  Formal details are given in \texttt{research/proofs/simplicial.md}.

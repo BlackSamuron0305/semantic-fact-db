@@ -1,0 +1,25 @@
+\section{Temporal and Provenance Workloads (C5--C7)}
+\label{sec:temporal_provenance}
+
+\paragraph{Temporal interval queries.}
+Event data, financial tickers, and knowledge bases with valid-time semantics require interval-constrained retrieval: given a fact $\phi$ with validity window $[t_s, t_e)$, return all facts whose windows intersect a query interval. In RDF stores, temporal annotations are reified as additional triples, forcing queries to filter on a path expression of length $O(a)$ per fact. SheafDB natively indexes each tuple's temporal attributes in an interval tree backed by augmented B-trees, supporting overlap, contains, and before/after predicates in $O(\log n + k)$ time where $k$ is the result cardinality.
+
+\paragraph{Sliding window aggregation.}
+Aggregate computation over sliding windows---e.g., ``sum of sensor readings over the past hour, updated every minute''---requires repeated range queries as the window shifts. A KG approach issues $N$ separate SPARQL queries for $N$ window positions, each performing the full reification traversal. SheafDB executes a single pass over the interval index, maintaining a running aggregate across window positions in $O(n \log n)$ total time, yielding an expected $N$-fold reduction in query overhead.
+
+\paragraph{Provenance chains and derivation DAGs.}
+Provenance workloads (C7) trace the derivation history of a fact through a chain or DAG of transformations. In PROV-O---the W3C provenance ontology---each derivation step is encoded as a reified triple `$\phi \xrightarrow{\text{wasGeneratedBy}} \text{Activity}$' with additional attribution triples. Chaining $d$ steps requires $O(d^2)$ recursive property-path evaluation on most SPARQL engines because each intermediate result must be rejoined with the provenance graph.
+
+SheafDB models provenance as a provenance sheaf: a functor from the derivation poset to the category of tuple sets. Each derivation step is a single lightweight edge in the sheaf rather than a collection of reified triples. Walking a chain of length $d$ costs $O(d)$---linear in the derivation depth---because the sheaf structure preserves the derivation topology without join overhead. Fork--join DAGs are handled by sheaf morphism composition in $O(d + b)$ where $b$ is the branching factor.
+
+\paragraph{Experimental setup.}
+Workloads C5 (temporal point-query), C6 (sliding-window aggregation), and C7 (provenance chain traversal) are evaluated at scale 1K--1M facts with interval widths drawn from uniform and exponential distributions. Provenance chain depth ranges from 1 to 100 steps.
+
+\input{tables/temporal_provenance_results.tex}
+
+\begin{figure}
+  \centering
+  \includegraphics{figures/temporal_performance.pdf}
+  \caption{Temporal query latency (C5), sliding-window aggregation time (C6), and provenance chain traversal time (C7) across scale. SheafDB achieves linear or log-linear scaling in all cases.}
+  \label{fig:temporal_performance}
+\end{figure}

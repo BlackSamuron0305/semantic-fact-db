@@ -1,0 +1,39 @@
+\section{Limitations}
+\label{sec:limitations}
+
+\subsection{Scalability Limits}
+\label{sec:limits:scalability}
+
+The current implementation is single-node and in-memory.
+Global section computation requires $O(|\mathcal{C}| \cdot N^2)$ time in
+the worst case, which limits scalability to datasets where $|\mathcal{C}|$
+and $N$ are moderate (on the order of $10^5$ facts).
+
+\subsection{Mathematical Assumptions}
+\label{sec:limits:math}
+
+The sheaf model assumes that the context poset is finite and has the
+Alexandrov topology. This is appropriate for our setting but may not
+generalize to infinite or continuous context spaces. The gluing condition
+assumes compatible sections can always be identified, which may fail in
+the presence of contradictory information.
+
+\subsection{Implementation Limitations}
+\label{sec:limits:implementation}
+
+The current prototype does not support:
+\begin{itemize}
+    \item Concurrent access or transactions.
+    \item Persistent storage (in-memory only).
+    \item Distributed execution.
+    \item Streaming or incremental fact ingestion.
+    \item Full SPARQL compliance (custom query language).
+\end{itemize}
+
+\subsection{Benchmark Limitations}
+\label{sec:limits:benchmark}
+
+The benchmark suite covers 15 query types. While representative, this is
+not exhaustive. Real-world workloads may exhibit different access patterns.
+The synthetic datasets, while controlled, may not capture all nuances of
+organic knowledge graph data.

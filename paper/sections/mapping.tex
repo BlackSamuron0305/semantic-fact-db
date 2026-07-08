@@ -1,0 +1,50 @@
+\section{Mapping}
+\label{sec:mapping}
+
+The mapping layer provides bidirectional conversion between the canonical
+semantic model and each storage engine's internal representation.
+
+\subsection{Canonical Mapping}
+\label{sec:mapping:canonical}
+
+The canonical mapping $\phi: \mathcal{F} \to \mathfrak{F}$ converts a
+generic \texttt{SemanticFact} into a \texttt{CanonicalFact}, which is the
+intermediate representation used for cross-engine comparison. The inverse
+mapping $\psi: \mathfrak{F} \to \mathcal{F}$ reconstructs the original fact.
+
+\[
+\psi(\phi(f)) = f \quad \text{(lossless)}
+\]
+
+\subsection{KG Mapping}
+\label{sec:mapping:kg}
+
+The KG mapping $\phi_{\mathrm{KG}}$ decomposes a \texttt{SemanticFact}
+into reified triples:
+
+\begin{enumerate}
+    \item Create an event node $e$ with type \texttt{rdf:Statement}.
+    \item Add triple $(e, \texttt{rdf:subject}, f.\text{subject})$.
+    \item Add triple $(e, \texttt{rdf:predicate}, f.\text{relation})$.
+    \item For each object $\omega_j$, add triple
+          $(e, \texttt{rdf:object}_j, \omega_j)$.
+\end{enumerate}
+
+Reconstruction requires $k$ joins to recover the original fact from
+its constituent triples.
+
+\subsection{Sheaf Mapping}
+\label{sec:mapping:sheaf}
+
+The Sheaf mapping $\phi_{\mathrm{Sheaf}}$ stores a \texttt{SemanticFact}
+directly as a section in its assigned context. No decomposition occurs.
+The fact is registered with the open set corresponding to its context and
+with ancestor contexts via restriction maps.
+
+\subsection{Equivalence Verification}
+\label{sec:mapping:verification}
+
+The \texttt{QueryEngine.results\_equivalent()} method compares result sets
+from different engines by canonical fact ID equality. The benchmark
+framework verifies equivalence across all queries before recording
+performance metrics.

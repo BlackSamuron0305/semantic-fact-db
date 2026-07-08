@@ -1,0 +1,132 @@
+% System Design
+% Detailed design of storage engines, indexes, query pipeline,
+% and benchmark isolation.
+
+\subsection{Detailed Design}
+
+\subsubsection{Storage Engines}
+
+\paragraph{Knowledge Graph (Baseline)}
+
+The KG engine stores facts as RDF-style triples using SPO/POS/OSP hash
+indexes.  N-ary facts are decomposed via reification~\cite{manola2004rdf}:
+an event node is created for each fact and the subject, predicate, and
+each object become triples with the event node as subject.
+
+Given a fact with arity $k$ and $m$ attributes, the KG generates
+$k + m + 3$ triples (one for the event type, one each for subject and
+predicate, one per object and attribute).  Reconstruction of the
+original fact requires $k + m$ joins.
+
+The KG implements the following indexes:
+
+\begin{itemize}
+    \item \textbf{SPO}: Subject $\rightarrow$ Predicate $\rightarrow$ Object.
+    \item \textbf{POS}: Predicate $\rightarrow$ Object $\rightarrow$ Subject.
+    \item \textbf{OSP}: Object $\rightarrow$ Subject $\rightarrow$ Predicate.
+\end{itemize}
+
+\paragraph{Sheaf Database (Primary)}
+
+The SheafDB engine stores facts directly as sections over a poset of
+contexts without decomposition.  Each fact is assigned to its maximal
+context and restriction maps to sub-contexts are maintained.
+
+The SheafDB implements the following indexes:
+
+\begin{itemize}
+    \item \textbf{Context Index}: Maps a context to the set of sections
+        (facts) assigned to that context.
+    \item \textbf{Stalk Index}: Maps an entity identifier to the set of
+        contexts in which that entity appears.
+    \item \textbf{Restriction Index}: Maps a pair of contexts
+        $(c_{\text{broad}}, c_{\text{narrow}})$ to the corresponding
+        restriction map.
+    \item \textbf{Neighbourhood Index}: Maps a context to its immediate
+        parents and children in the context poset.
+    \item \textbf{Global Section Cache}: Caches the result of gluing all
+        local sections into the global section (root context).
+\end{itemize}
+
+Context-scoped queries examine only the relevant context's sections,
+avoiding the join overhead of the KG.  Global queries require gluing
+compatible local sections, which scales with the number of contexts
+rather than the number of triples.
+
+\paragraph{Simplicial Database (Secondary)}
+
+The SimplicialDB engine stores facts as simplices in a simplicial set.
+An $n$-ary fact becomes an $n$-simplex whose vertices are the entities
+and values involved.  Face maps correspond to restriction (dropping a
+participant) and degeneracy maps to adding redundant information.
+
+The SimplicialDB implements the following indexes:
+
+\begin{itemize}
+    \item \textbf{Simplex Index}: Maps a simplex identifier to its
+        ordered list of vertices.
+    \item \textbf{Incidence Matrix}: Records which $(n-1)$-simplices
+        (faces) are contained in which $n$-simplices.
+    \item \textbf{Boundary Operator}: Pre-computed matrix representing
+        $\partial_n$ for each dimension $n$, satisfying
+        $\partial_{n-1} \circ \partial_n = 0$.
+    \item \textbf{Dimension Index}: Groups simplices by dimension for
+        efficient traversal.
+\end{itemize}
+
+The simplicial representation provides a natural notion of
+\textbf{homological consistency}: inconsistencies in the knowledge base
+manifest as non-trivial homology groups.
+
+\subsubsection{Query Pipeline}
+
+All queries pass through the same pipeline regardless of engine:
+
+\begin{enumerate}
+    \item \textbf{Parsing}: A query string is parsed into a logical plan
+        (a \texttt{Query} object with type, filters, and parameters).
+    \item \textbf{Optimization}: The logical plan is transformed into a
+        physical plan by the engine-specific optimizer, which applies
+        cost-based rules (selectivity estimation, index selection,
+        join ordering).
+    \item \textbf{Execution}: The physical plan is executed against the
+        storage engine.  The execution engine handles index lookups,
+        data retrieval, and result construction.
+    \item \textbf{Canonicalization}: Engine-native results are mapped
+        back to \texttt{SemanticFact} instances via the canonical
+        adapter.
+    \item \textbf{Validation}: Results are checked against invariants.
+    \item \textbf{Benchmark Collection}: Metrics (latency, memory, rows
+        scanned) are recorded.
+\end{enumerate}
+
+\subsubsection{Benchmark Isolation}
+
+The benchmark layer is strictly isolated from the storage engines:
+
+\begin{itemize}
+    \item It communicates only through the \texttt{DatabaseEngine}
+        abstract interface.
+    \item It never inspects engine-internal state.
+    \item It compares results only through the canonical model.
+    \item It has no knowledge of which engine is running.
+\end{itemize}
+
+This design prevents biased comparisons: the same benchmark code runs
+identically against all engines.  Any difference in results is due to
+the engine, not the benchmark framework.
+
+\subsubsection{Configuration}
+
+All engines share a common configuration system with three sources
+(in increasing priority order):
+
+\begin{enumerate}
+    \item YAML configuration files (e.g., \texttt{configs/benchmark.yaml}).
+    \item Environment variables (prefix \texttt{SFDB\_}).
+    \item Programmatic overrides via the \texttt{Config} dataclass.
+\end{enumerate}
+
+The configuration system exposes settings for storage backend, index
+parameters, logging, and benchmark parameters.  Every engine is
+configurable through the same \texttt{Config} type.

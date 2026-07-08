@@ -1,0 +1,56 @@
+\subsection{KG Query Engine}
+
+The query engine supports a SPARQL-inspired syntax with four execution strategies.
+
+\subsubsection{SPARQL Syntax}
+
+Supported query structure:
+
+\begin{verbatim}
+SELECT ?var1 ?var2 ...
+WHERE {
+    ?s ?p ?o .
+    FILTER(condition)
+    OPTIONAL { ... }
+}
+ORDER BY ?var ASC|DESC
+LIMIT n
+OFFSET m
+\end{verbatim}
+
+\subsubsection{Query Planning}
+
+Query execution follows a two-phase planning approach:
+
+\textbf{Logical Phase}: The query is translated into a tree of logical operators:
+\begin{itemize}
+    \item \texttt{LogicalScan}: Full sequential scan of the triple table
+    \item \texttt{LogicalIndexSeek}: Index-based access by subject, predicate, or object
+    \item \texttt{LogicalFilter}: Predicate evaluation on rows
+    \item \texttt{LogicalJoin}: Combination of two sub-plans (nested-loop or hash join)
+    \item \texttt{LogicalProject}: Column selection
+    \item \texttt{LogicalSort}: Row ordering
+    \item \texttt{LogicalLimit}: Row count restriction
+    \item \texttt{LogicalAggregate}: Grouping and aggregation
+\end{itemize}
+
+\textbf{Physical Phase}: Each logical operator is converted to a physical execution strategy.
+
+\subsubsection{Optimization}
+
+The cost-based optimizer applies three transformations:
+
+\begin{enumerate}
+    \item \textbf{Filter pushdown}: Moves filter predicates closer to data sources to reduce intermediate row counts early.
+    \item \textbf{Join reordering}: Reorders joins so that smaller intermediate results are processed first, reducing overall cost.
+    \item \textbf{Index selection}: Chooses between SPO, POS, and OPS indexes based on which columns are bound in the query pattern.
+\end{enumerate}
+
+Cost estimation uses a simple model:
+\[
+\text{cost} = N_{\text{pages}} \times C_{\text{seq}} + N_{\text{rows}} \times C_{\text{cpu}}
+\]
+
+\subsubsection{Execution}
+
+The physical plan is executed by a tree-walking interpreter that materializes intermediate results. For large result sets, streaming execution can be used to bound memory usage.

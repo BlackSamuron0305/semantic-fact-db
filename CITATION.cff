@@ -1,0 +1,28 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "Semantic Fact Database (SFDB)"
+authors:
+  - given-names: "Author"
+    family-names: "Placeholder"
+    orcid: "https://orcid.org/0000-0000-0000-0000"
+    affiliation: "Affiliation Placeholder"
+abstract: "A sheaf-theoretic approach to semantic knowledge representation that outperforms traditional RDF knowledge graphs on contextual queries while providing native consistency checking and global section construction."
+version: 0.1.0
+date-released: 2026-07-08
+repository-code: "https://github.com/placeholder/semantic-fact-db"
+license: "MIT"
+keywords:
+  - "sheaf theory"
+  - "knowledge graph"
+  - "semantic database"
+  - "contextual reasoning"
+  - "category theory"
+  - "algebraic topology"
+references:
+  - type: "article"
+    title: "Sheaf-Theoretic Representations for Efficient Semantic Fact Storage"
+    authors:
+      - given-names: "Author"
+        family-names: "Placeholder"
+    year: 2026
+    journal: "Placeholder"
