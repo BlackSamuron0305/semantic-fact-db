@@ -76,6 +76,8 @@ dev = [
     "hypothesis>=6.156.3",
     "mypy>=2.2.0",
     "ruff>=0.2",
+    "sphinx>=7.0",
+    "sphinx-rtd-theme>=2.0",
     "types-psutil>=7.2.2.20260518",
     "types-pyyaml>=6.0.12.20260518",
 ]
