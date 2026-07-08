@@ -391,6 +391,16 @@ class SheafDatabaseEngine(DatabaseEngine):
         cur = self._conn.execute("SELECT COUNT(*) FROM sections")
         total_sections = cur.fetchone()[0]
 
+        # Collect selectivity statistics
+        context_count = len(self._context_index._ctx_to_facts) if hasattr(self._context_index, '_ctx_to_facts') else 0
+        selectivity: dict[str, float] = {}
+        selectivity["section_count"] = float(total_sections)
+        selectivity["fact_count"] = float(self._fact_count)
+        selectivity["context_count"] = float(max(1, context_count))
+        selectivity["avg_sections_per_context"] = total_sections / max(1, context_count)
+        selectivity["avg_sections_per_fact"] = total_sections / max(1, self._fact_count)
+        selectivity["open_set_count"] = float(self._topology.open_set_count())
+
         storage_bytes = 0
         if self._db_path != ":memory:":
             p = Path(self._db_path)
@@ -408,6 +418,7 @@ class SheafDatabaseEngine(DatabaseEngine):
             storage_bytes=storage_bytes,
             index_count=8,
             engine_type=EngineType.SHEAF_DATABASE,
+            selectivity=selectivity,
         )
 
     def verify(self) -> VerificationResult:

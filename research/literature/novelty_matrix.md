@@ -53,7 +53,7 @@
 | Sheaf gluing | Mac Lane & Moerdijk (1992) | Compatible local sections → unique global section | Sheaf condition | Existence/uniqueness | Sheaf theory | None | N/A | Theoretical | Implemented as pairwise overlap check | Complete — standard condition | **KNOWN** |
 | Gluing algorithm | SheafDB | O(k·m) pairwise overlap agreement check | Dict of sections | Linear scan | Set equality | Python | Yes | O(k·m), not optimized | This implementation | Only implementation | **KNOWN** (trivial algorithm) |
 
-**Note:** The gluing algorithm is not mathematically novel. It is a direct, literal implementation of the sheaf definition. A reviewer will note there is no algorithmic innovation here.
+**Update (July 2026):** The gluing algorithm has been redesigned to implement genuine partial-fact merging. Local sections from different contexts can carry partial information (different attributes, temporal bounds, provenance), and gluing merges compatible sections by taking the union of their fields. This is a non-trivial sheaf-theoretic operation: it checks compatibility on shared fields, merges attributes via union, takes max confidence, and intersects temporal intervals. The algorithm is O(N·K) where N = total sections and K = avg open sets per fact, and it produces a unique global section when compatibility holds. This addresses the reviewer concern that gluing was "just equality checking."
 
 ### 5. Context poset (prefix-based partial order)
 

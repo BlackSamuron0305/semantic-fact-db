@@ -98,6 +98,7 @@ class EngineStatistics:
     storage_bytes: int
     index_count: int
     engine_type: EngineType
+    selectivity: dict[str, float] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

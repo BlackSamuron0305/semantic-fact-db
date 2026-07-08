@@ -335,6 +335,7 @@ class KnowledgeGraphEngine(DatabaseEngine):
         self._db_path: str = ":memory:"
         self._six_index: bool = False
         self._initialized = False
+        self._fact_count: int = 0
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -423,204 +424,54 @@ class KnowledgeGraphEngine(DatabaseEngine):
             rel_pid = self._encoder.encode_predicate(fact.relation.value)
             ctx_str = str(fact.context)
 
-            # rdf:type
-            self._indexes.insert_triple(
-                EncodedTriple(
-                    subject_id=event_eid,
-                    predicate_id=self._encoder.encode_predicate(RDF_TYPE),
-                    object_id=self._encoder.encode_entity(SFDB_FACT),
-                    object_type=OBJECT_TYPE_ENTITY,
-                    event_id=event_eid,
-                    role="type",
-                    context=ctx_str,
-                )
-            )
-            # rdf:subject
-            self._indexes.insert_triple(
-                EncodedTriple(
-                    subject_id=event_eid,
-                    predicate_id=self._encoder.encode_predicate(RDF_SUBJECT),
-                    object_id=subj_eid,
-                    object_type=OBJECT_TYPE_ENTITY,
-                    event_id=event_eid,
-                    role="subject",
-                    context=ctx_str,
-                )
-            )
-            # rdf:predicate
-            self._indexes.insert_triple(
-                EncodedTriple(
-                    subject_id=event_eid,
-                    predicate_id=self._encoder.encode_predicate(RDF_PREDICATE),
-                    object_id=rel_pid,
-                    object_type=OBJECT_TYPE_ENTITY,
-                    event_id=event_eid,
-                    role="predicate",
-                    context=ctx_str,
-                )
-            )
-            # objects
+            # Build all triples for this fact via a data-driven schema
+            triples: list[EncodedTriple] = []
+
+            # Static metadata triples
+            triples.append(EncodedTriple(event_eid, self._encoder.encode_predicate(RDF_TYPE), self._encoder.encode_entity(SFDB_FACT), OBJECT_TYPE_ENTITY, event_eid, "type", ctx_str))
+            triples.append(EncodedTriple(event_eid, self._encoder.encode_predicate(RDF_SUBJECT), subj_eid, OBJECT_TYPE_ENTITY, event_eid, "subject", ctx_str))
+            triples.append(EncodedTriple(event_eid, self._encoder.encode_predicate(RDF_PREDICATE), rel_pid, OBJECT_TYPE_ENTITY, event_eid, "predicate", ctx_str))
+
+            # Object slots (n-ary)
             for i, obj in enumerate(fact.objects):
-                if obj.is_reference:
-                    oid = self._encoder.encode_entity(str(obj.inner))
-                    otype = OBJECT_TYPE_ENTITY
-                else:
-                    oid = self._encoder.encode_literal(str(obj.inner), obj.type_hint.name.lower())
-                    otype = OBJECT_TYPE_LITERAL
-                obj_pred = f"{RDF_OBJECT}_{i}"
-                self._indexes.insert_triple(
-                    EncodedTriple(
-                        subject_id=event_eid,
-                        predicate_id=self._encoder.encode_predicate(obj_pred),
-                        object_id=oid,
-                        object_type=otype,
-                        event_id=event_eid,
-                        role=f"object_{i}",
-                        context=ctx_str,
-                    )
-                )
-            # attributes
+                oid, otype = self._encode_value(obj)
+                triples.append(EncodedTriple(event_eid, self._encoder.encode_predicate(f"{RDF_OBJECT}_{i}"), oid, otype, event_eid, f"object_{i}", ctx_str))
+
+            # Attributes
             for k, v in fact.attributes.items():
-                attr_pred = f"{SFDB_ATTR_PREFIX}{k}"
-                if v.is_reference:
-                    aid = self._encoder.encode_entity(str(v.inner))
-                    atype = OBJECT_TYPE_ENTITY
-                else:
-                    aid = self._encoder.encode_literal(str(v.inner), v.type_hint.name.lower())
-                    atype = OBJECT_TYPE_LITERAL
-                self._indexes.insert_triple(
-                    EncodedTriple(
-                        subject_id=event_eid,
-                        predicate_id=self._encoder.encode_predicate(attr_pred),
-                        object_id=aid,
-                        object_type=atype,
-                        event_id=event_eid,
-                        role=f"attr_{k}",
-                        context=ctx_str,
-                    )
-                )
-            # context
-            self._indexes.insert_triple(
-                EncodedTriple(
-                    subject_id=event_eid,
-                    predicate_id=self._encoder.encode_predicate(SFDB_CONTEXT),
-                    object_id=self._encoder.encode_literal(ctx_str),
-                    object_type=OBJECT_TYPE_LITERAL,
-                    event_id=event_eid,
-                    role="context",
-                    context=ctx_str,
-                )
-            )
-            # confidence
-            self._indexes.insert_triple(
-                EncodedTriple(
-                    subject_id=event_eid,
-                    predicate_id=self._encoder.encode_predicate(SFDB_CONFIDENCE),
-                    object_id=self._encoder.encode_literal(str(fact.confidence), "float"),
-                    object_type=OBJECT_TYPE_LITERAL,
-                    event_id=event_eid,
-                    role="confidence",
-                    context=ctx_str,
-                )
-            )
-            # provenance
-            self._indexes.insert_triple(
-                EncodedTriple(
-                    subject_id=event_eid,
-                    predicate_id=self._encoder.encode_predicate(SFDB_PROV_SOURCE),
-                    object_id=self._encoder.encode_literal(fact.provenance.source),
-                    object_type=OBJECT_TYPE_LITERAL,
-                    event_id=event_eid,
-                    role="prov_source",
-                    context=ctx_str,
-                )
-            )
-            self._indexes.insert_triple(
-                EncodedTriple(
-                    subject_id=event_eid,
-                    predicate_id=self._encoder.encode_predicate(SFDB_PROV_RECORDED),
-                    object_id=self._encoder.encode_literal(
-                        fact.provenance.recorded_at.isoformat(), "datetime"
-                    ),
-                    object_type=OBJECT_TYPE_LITERAL,
-                    event_id=event_eid,
-                    role="prov_recorded",
-                    context=ctx_str,
-                )
-            )
-            self._indexes.insert_triple(
-                EncodedTriple(
-                    subject_id=event_eid,
-                    predicate_id=self._encoder.encode_predicate(SFDB_PROV_CONFIDENCE),
-                    object_id=self._encoder.encode_literal(
-                        str(fact.provenance.confidence), "float"
-                    ),
-                    object_type=OBJECT_TYPE_LITERAL,
-                    event_id=event_eid,
-                    role="prov_confidence",
-                    context=ctx_str,
-                )
-            )
-            self._indexes.insert_triple(
-                EncodedTriple(
-                    subject_id=event_eid,
-                    predicate_id=self._encoder.encode_predicate(SFDB_PROV_METHOD),
-                    object_id=self._encoder.encode_literal(fact.provenance.method),
-                    object_type=OBJECT_TYPE_LITERAL,
-                    event_id=event_eid,
-                    role="prov_method",
-                    context=ctx_str,
-                )
-            )
-            # temporal
+                aid, atype = self._encode_value(v)
+                triples.append(EncodedTriple(event_eid, self._encoder.encode_predicate(f"{SFDB_ATTR_PREFIX}{k}"), aid, atype, event_eid, f"attr_{k}", ctx_str))
+
+            # Context
+            triples.append(EncodedTriple(event_eid, self._encoder.encode_predicate(SFDB_CONTEXT), self._encoder.encode_literal(ctx_str), OBJECT_TYPE_LITERAL, event_eid, "context", ctx_str))
+
+            # Confidence
+            triples.append(EncodedTriple(event_eid, self._encoder.encode_predicate(SFDB_CONFIDENCE), self._encoder.encode_literal(str(fact.confidence), "float"), OBJECT_TYPE_LITERAL, event_eid, "confidence", ctx_str))
+
+            # Provenance
+            triples.append(EncodedTriple(event_eid, self._encoder.encode_predicate(SFDB_PROV_SOURCE), self._encoder.encode_literal(fact.provenance.source), OBJECT_TYPE_LITERAL, event_eid, "prov_source", ctx_str))
+            triples.append(EncodedTriple(event_eid, self._encoder.encode_predicate(SFDB_PROV_RECORDED), self._encoder.encode_literal(fact.provenance.recorded_at.isoformat(), "datetime"), OBJECT_TYPE_LITERAL, event_eid, "prov_recorded", ctx_str))
+            triples.append(EncodedTriple(event_eid, self._encoder.encode_predicate(SFDB_PROV_CONFIDENCE), self._encoder.encode_literal(str(fact.provenance.confidence), "float"), OBJECT_TYPE_LITERAL, event_eid, "prov_confidence", ctx_str))
+            triples.append(EncodedTriple(event_eid, self._encoder.encode_predicate(SFDB_PROV_METHOD), self._encoder.encode_literal(fact.provenance.method), OBJECT_TYPE_LITERAL, event_eid, "prov_method", ctx_str))
+
+            # Temporal
             if fact.temporal is not None:
                 if fact.temporal.start is not None:
-                    self._indexes.insert_triple(
-                        EncodedTriple(
-                            subject_id=event_eid,
-                            predicate_id=self._encoder.encode_predicate(SFDB_TEMPORAL_START),
-                            object_id=self._encoder.encode_literal(
-                                fact.temporal.start.isoformat(), "datetime"
-                            ),
-                            object_type=OBJECT_TYPE_LITERAL,
-                            event_id=event_eid,
-                            role="temporal_start",
-                            context=ctx_str,
-                        )
-                    )
+                    triples.append(EncodedTriple(event_eid, self._encoder.encode_predicate(SFDB_TEMPORAL_START), self._encoder.encode_literal(fact.temporal.start.isoformat(), "datetime"), OBJECT_TYPE_LITERAL, event_eid, "temporal_start", ctx_str))
                 if fact.temporal.end is not None:
-                    self._indexes.insert_triple(
-                        EncodedTriple(
-                            subject_id=event_eid,
-                            predicate_id=self._encoder.encode_predicate(SFDB_TEMPORAL_END),
-                            object_id=self._encoder.encode_literal(
-                                fact.temporal.end.isoformat(), "datetime"
-                            ),
-                            object_type=OBJECT_TYPE_LITERAL,
-                            event_id=event_eid,
-                            role="temporal_end",
-                            context=ctx_str,
-                        )
-                    )
+                    triples.append(EncodedTriple(event_eid, self._encoder.encode_predicate(SFDB_TEMPORAL_END), self._encoder.encode_literal(fact.temporal.end.isoformat(), "datetime"), OBJECT_TYPE_LITERAL, event_eid, "temporal_end", ctx_str))
 
-            # metadata
+            # Metadata
             for mk, mv in fact.metadata.items():
-                meta_pred = f"sfdb:meta_{mk}"
-                self._indexes.insert_triple(
-                    EncodedTriple(
-                        subject_id=event_eid,
-                        predicate_id=self._encoder.encode_predicate(meta_pred),
-                        object_id=self._encoder.encode_literal(
-                            json.dumps(mv) if not isinstance(mv, str) else mv
-                        ),
-                        object_type=OBJECT_TYPE_LITERAL,
-                        event_id=event_eid,
-                        role=f"meta_{mk}",
-                        context=ctx_str,
-                    )
-                )
+                mv_str = json.dumps(mv) if not isinstance(mv, str) else mv
+                triples.append(EncodedTriple(event_eid, self._encoder.encode_predicate(f"sfdb:meta_{mk}"), self._encoder.encode_literal(mv_str), OBJECT_TYPE_LITERAL, event_eid, f"meta_{mk}", ctx_str))
+
+            # Insert all triples
+            for t in triples:
+                self._indexes.insert_triple(t)
 
             self._conn.commit()
+            self._fact_count += 1
             ns = time.perf_counter_ns() - t0
             self._hooks.record_insert(ns)
             return InsertResult(fact_id=fact.id, success=True)
@@ -868,6 +719,12 @@ class KnowledgeGraphEngine(DatabaseEngine):
                 return Value.literal(int(val))
         return Value.literal(val)
 
+    def _encode_value(self, v: Value) -> tuple[int, str]:
+        """Encode a Value to (encoded_id, object_type)."""
+        if v.is_reference:
+            return self._encoder.encode_entity(str(v.inner)), OBJECT_TYPE_ENTITY
+        return self._encoder.encode_literal(str(v.inner), v.type_hint.name.lower()), OBJECT_TYPE_LITERAL
+
     def explain(self, query: Query) -> ExecutionPlan:
         t0 = time.perf_counter_ns()
         q = query
@@ -898,12 +755,22 @@ class KnowledgeGraphEngine(DatabaseEngine):
         predicate_count = self._encoder.predicate_count()
         literal_count = self._encoder.literal_count()
         triple_count = self._indexes.count()
+
+        # Collect selectivity statistics
+        selectivity: dict[str, float] = {}
+        selectivity["triple_count"] = float(triple_count)
+        selectivity["entity_count"] = float(entity_count)
+        selectivity["predicate_count"] = float(predicate_count)
+        selectivity["avg_facts_per_entity"] = triple_count / max(1, entity_count)
+        selectivity["avg_triples_per_fact"] = triple_count / max(1, self._fact_count)
+
         return EngineStatistics(
             total_facts=triple_count,
             total_entities=entity_count + predicate_count + literal_count,
             storage_bytes=self._estimate_storage_bytes(),
             index_count=4 if not self._six_index else 7,
             engine_type=EngineType.KNOWLEDGE_GRAPH,
+            selectivity=selectivity,
         )
 
     def _estimate_storage_bytes(self) -> int:

@@ -286,40 +286,58 @@ def compile_paper() -> bool:
             return False
         return True
     except FileNotFoundError:
-        # try pdflatex directly
         try:
-            for _ in range(2):
-                r = subprocess.run(
-                    ["pdflatex", "-interaction=nonstopmode", "main.tex"],
-                    capture_output=True,
-                    text=True,
-                    timeout=60,
-                    cwd=str(PAPER_DIR),
-                )
-                if r.returncode != 0:
-                    print(r.stdout[-1000:])
-                    print(r.stderr[-1000:])
-                    return False
-            # bibtex
-            subprocess.run(
-                ["bibtex", "main"],
+            result = subprocess.run(
+                ["tectonic", "--keep-logs", "--keep-intermediates", "main.tex"],
                 capture_output=True,
                 text=True,
-                timeout=30,
+                timeout=900,
                 cwd=str(PAPER_DIR),
             )
-            for _ in range(2):
-                r = subprocess.run(
-                    ["pdflatex", "-interaction=nonstopmode", "main.tex"],
-                    capture_output=True,
-                    text=True,
-                    timeout=60,
-                    cwd=str(PAPER_DIR),
-                )
+            if result.returncode != 0:
+                print("=== Tectonic stdout ===")
+                print(result.stdout[-2000:])
+                print("=== Tectonic stderr ===")
+                print(result.stderr[-2000:])
+                return False
             return True
         except FileNotFoundError:
-            print("ERROR: Neither latexmk nor pdflatex found. Install TeX distribution.")
-            return False
+            # fall back to pdflatex/bibtex directly
+            try:
+                for _ in range(2):
+                    r = subprocess.run(
+                        ["pdflatex", "-interaction=nonstopmode", "main.tex"],
+                        capture_output=True,
+                        text=True,
+                        timeout=60,
+                        cwd=str(PAPER_DIR),
+                    )
+                    if r.returncode != 0:
+                        print(r.stdout[-1000:])
+                        print(r.stderr[-1000:])
+                        return False
+                # bibtex
+                subprocess.run(
+                    ["bibtex", "main"],
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                    cwd=str(PAPER_DIR),
+                )
+                for _ in range(2):
+                    r = subprocess.run(
+                        ["pdflatex", "-interaction=nonstopmode", "main.tex"],
+                        capture_output=True,
+                        text=True,
+                        timeout=60,
+                        cwd=str(PAPER_DIR),
+                    )
+                return True
+            except FileNotFoundError:
+                print(
+                    "ERROR: No supported TeX engine found. Install latexmk, tectonic, or pdflatex."
+                )
+                return False
     except Exception as e:
         print(f"ERROR during compilation: {e}")
         return False
@@ -328,12 +346,15 @@ def compile_paper() -> bool:
 
 
 def clean() -> None:
-    subprocess.run(
-        ["latexmk", "-C"],
-        capture_output=True,
-        text=True,
-        cwd=str(PAPER_DIR),
-    )
+    try:
+        subprocess.run(
+            ["latexmk", "-C"],
+            capture_output=True,
+            text=True,
+            cwd=str(PAPER_DIR),
+        )
+    except FileNotFoundError:
+        pass
     for ext in ["*.aux", "*.log", "*.out", "*.bbl", "*.blg", "*.fls", "*.fdb_latexmk"]:
         for f in PAPER_DIR.glob(ext):
             f.unlink(missing_ok=True)

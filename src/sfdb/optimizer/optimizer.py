@@ -40,6 +40,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum, auto
 
+from common.interfaces import EngineStatistics, EngineType
 from sfdb.query.language import Query, QueryType
 
 
@@ -92,38 +93,59 @@ class OptimizationRule:
 class QueryOptimizer:
     """Optimizes queries by selecting the best plan and applying rewrites.
 
+    Uses real engine statistics for cost estimation instead of
+    hardcoded heuristics.  The optimizer collects selectivity data
+    from both engines and estimates costs based on actual cardinalities.
+
     The optimizer also collects statistics about the optimization process
     for the benchmark.
     """
 
     def __init__(
         self,
-        kg_triples: int = 0,
-        kg_entities: int = 0,
-        sheaf_sections: int = 0,
-        sheaf_contexts: int = 0,
+        kg_stats: EngineStatistics | None = None,
+        sheaf_stats: EngineStatistics | None = None,
     ) -> None:
-        self._kg_triples = kg_triples
-        self._kg_entities = kg_entities
-        self._sheaf_sections = sheaf_sections
-        self._sheaf_contexts = sheaf_contexts
+        self._kg_stats = kg_stats
+        self._sheaf_stats = sheaf_stats
         self._rules: list[OptimizationRule] = []
+
+    def update_statistics(
+        self, kg_stats: EngineStatistics | None = None,
+        sheaf_stats: EngineStatistics | None = None,
+    ) -> None:
+        """Update engine statistics for cost estimation."""
+        if kg_stats is not None:
+            self._kg_stats = kg_stats
+        if sheaf_stats is not None:
+            self._sheaf_stats = sheaf_stats
 
     def add_rule(self, rule: OptimizationRule) -> None:
         self._rules.append(rule)
 
     def estimate_cost_kg(self, query: Query) -> CostEstimate:
-        """Estimate cost of executing query on KG."""
-        scan_cost = float(self._kg_triples)
+        """Estimate cost of executing query on KG using real statistics."""
+        if self._kg_stats is None:
+            return CostEstimate(total_cost=float("inf"))
+
+        sel = self._kg_stats.selectivity
+        triple_count = sel.get("triple_count", 0.0)
+        entity_count = sel.get("entity_count", 1.0)
+        avg_facts_per_entity = sel.get("avg_facts_per_entity", 1.0)
+        avg_triples_per_fact = sel.get("avg_triples_per_fact", 1.0)
+
+        scan_cost = triple_count
+
         join_cost = 0.0
-
         if query.type == QueryType.WALK:
-            avg_degree = max(1.0, self._kg_triples / max(1, self._kg_entities))
-            join_cost = float(query.max_depth) * avg_degree
+            # Walk: each step follows avg_facts_per_entity edges
+            join_cost = float(query.max_depth) * avg_facts_per_entity
         elif query.type == QueryType.JOIN:
-            join_cost = float(len(query.entities)) ** 2
+            # Join: pairwise comparison of entity neighborhoods
+            join_cost = float(len(query.entities)) ** 2 * avg_facts_per_entity
 
-        reconstruction_cost = scan_cost * 0.1
+        # Reconstruction: each fact requires avg_triples_per_fact lookups
+        reconstruction_cost = scan_cost * 0.1 * avg_triples_per_fact
 
         total = scan_cost + join_cost + reconstruction_cost
         return CostEstimate(
@@ -134,24 +156,39 @@ class QueryOptimizer:
         )
 
     def estimate_cost_sheaf(self, query: Query) -> CostEstimate:
-        """Estimate cost of executing query on Sheaf DB."""
+        """Estimate cost of executing query on Sheaf DB using real statistics."""
+        if self._sheaf_stats is None:
+            return CostEstimate(total_cost=float("inf"))
+
+        sel = self._sheaf_stats.selectivity
+        section_count = sel.get("section_count", 0.0)
+        context_count = sel.get("context_count", 1.0)
+        avg_sections_per_context = sel.get("avg_sections_per_context", 1.0)
+        avg_sections_per_fact = sel.get("avg_sections_per_fact", 1.0)
+
         if query.type in (QueryType.FACT, QueryType.WALK):
             # Sheaf only scans sections local to the context
-            sections_per_context = max(
-                1.0,
-                self._sheaf_sections / max(1, self._sheaf_contexts),
-            )
-            scan_cost = sections_per_context
+            scan_cost = avg_sections_per_context
             join_cost = 0.0  # No decomposition → no joins needed
             reconstruction_cost = 0.0  # Sections are already complete
         elif query.type == QueryType.JOIN:
             # Joins still require scanning in sheaf, but can be
             # localized to specific contexts
-            scan_cost = float(self._sheaf_sections)
-            join_cost = float(len(query.entities))
+            scan_cost = section_count
+            join_cost = float(len(query.entities)) * avg_sections_per_context
             reconstruction_cost = 0.0
+        elif query.type == QueryType.CONTEXT:
+            # Context query: only scan the relevant context
+            scan_cost = avg_sections_per_context
+            join_cost = 0.0
+            reconstruction_cost = 0.0
+        elif query.type == QueryType.GLOBAL:
+            # Global query: must scan everything and glue
+            scan_cost = section_count
+            join_cost = 0.0
+            reconstruction_cost = section_count * 0.5  # gluing overhead
         else:
-            scan_cost = float(self._sheaf_sections)
+            scan_cost = section_count
             join_cost = 0.0
             reconstruction_cost = 0.0
 

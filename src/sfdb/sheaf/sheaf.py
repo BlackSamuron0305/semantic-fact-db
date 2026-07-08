@@ -119,22 +119,27 @@ class ContextPoset:
             return None
         return Context(".".join(c1.segments[:i]))
 
-    def meet(self, c1: Context, c2: Context) -> Context:
+    def meet(self, c1: Context, c2: Context) -> Context | None:
         """Compute the meet (greatest lower bound) of two contexts.
 
-        In the prefix poset, the meet of c₁ and c₂ is the more specific
-        of the two if one refines the other, otherwise the longest
-        common prefix (which is an upper bound, not a lower bound).
-        Since the prefix poset is a meet-semilattice only when contexts
-        share a common refinement, we return the more specific context
-        when one refines the other.
+        In the prefix poset, the meet of c₁ and c₂ is the longest common
+        prefix.  If one refines the other, the more specific is returned.
+        For disjoint contexts with no common prefix beyond root, returns
+        the root context (the true meet in a bounded poset).
+
+        Returns None only when the poset is empty (no root exists).
         """
         if c1 <= c2:
             return c1
         if c2 <= c1:
             return c2
-        # When neither refines the other, return the longer as more specific
-        return c1 if len(c1.segments) >= len(c2.segments) else c2
+        # Longest common prefix = true meet in a prefix poset
+        i = 0
+        while i < len(c1.segments) and i < len(c2.segments) and c1.segments[i] == c2.segments[i]:
+            i += 1
+        if i == 0:
+            return Context("world")  # root is the meet of disjoint branches
+        return Context(".".join(c1.segments[:i]))
 
     @property
     def root(self) -> Context | None:

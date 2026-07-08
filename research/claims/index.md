@@ -37,3 +37,5 @@
 - EXISTS: Evidence is documented and available
 - PARTIAL: Some evidence exists but is incomplete
 - MISSING: No evidence yet
+
+**Honest scope note:** The benchmark framework defines 5 engine adapters (KG, Sheaf, Jena, Blazegraph, Neo4j) but only 2 (KG, Sheaf) have working implementations. The Jena adapter has partial rdflib support; Blazegraph and Neo4j are stubs. All cross-engine comparisons in the paper are between KG and Sheaf only.

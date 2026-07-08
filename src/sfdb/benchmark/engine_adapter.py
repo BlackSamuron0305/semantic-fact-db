@@ -159,6 +159,13 @@ class JenaEngineAdapter(EngineAdapter):
 
 
 class BlazegraphEngineAdapter(EngineAdapter):
+    """Stub adapter — not yet implemented.
+
+    This adapter exists as a placeholder for future work.  All methods
+    are no-ops.  The benchmark framework only compares KG and Sheaf
+    engines; Blazegraph integration is planned but not yet functional.
+    """
+
     def __init__(self) -> None:
         self._available = False
 
@@ -182,6 +189,13 @@ class BlazegraphEngineAdapter(EngineAdapter):
 
 
 class Neo4jEngineAdapter(EngineAdapter):
+    """Stub adapter — not yet implemented.
+
+    This adapter exists as a placeholder for future work.  All methods
+    are no-ops.  The benchmark framework only compares KG and Sheaf
+    engines; Neo4j integration is planned but not yet functional.
+    """
+
     def __init__(self) -> None:
         self._available = False
 
