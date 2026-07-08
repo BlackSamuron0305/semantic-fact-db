@@ -20,11 +20,5 @@ Given a consistent family of local assignments, the \emph{global section}---a si
 \paragraph{Applications.}
 Global sections enable principled data integration: heterogeneous sources produce local sections of the same entity sheaf, and the gluing axiom determines whether they can be merged without contradiction. In sensor fusion, overlapping sensor coverage regions are contexts; the consistency sheaf guarantees that fused readings satisfy physical continuity constraints.
 
-\input{tables/consistency_results.tex}
-
-\begin{figure}
-  \centering
-  \includegraphics{figures/global_section_scaling.pdf}
-  \caption{Consistency check time (C8) and global section construction time (C9) vs.\ number of overlapping contexts. SheafDB scales polynomially; constraint-based approaches exhibit exponential growth.}
-  \label{fig:global_section_scaling}
-\end{figure}
+The measured overhead of SheafDB's consistency checking (C8) and global section construction (C9) appears in Section~\ref{sec:evaluation}. Complexity analysis for the CSP baseline is given in Section~\ref{sec:complexity}.
+\endinput

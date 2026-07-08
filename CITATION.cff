@@ -2,14 +2,14 @@ cff-version: 1.2.0
 message: "If you use this software, please cite it as below."
 title: "Semantic Fact Database (SFDB)"
 authors:
-  - given-names: "Author"
-    family-names: "Placeholder"
-    orcid: "https://orcid.org/0000-0000-0000-0000"
-    affiliation: "Affiliation Placeholder"
-abstract: "A sheaf-theoretic approach to semantic knowledge representation that outperforms traditional RDF knowledge graphs on contextual queries while providing native consistency checking and global section construction."
+  - given-names: "BlackSamuron0305"
+    family-names: ""
+    orcid: ""
+    affiliation: ""
+abstract: "A sheaf-theoretic approach to semantic fact storage that achieves 3-30x LOOKUP speedup via stalk-indexed retrieval while matching KG insert performance. Full-scan queries are currently slower due to open-set iteration overhead, revealing a fundamental contextual-locality vs. global-access tradeoff."
 version: 0.1.0
 date-released: 2026-07-08
-repository-code: "https://github.com/placeholder/semantic-fact-db"
+repository-code: "https://github.com/BlackSamuron0305/semantic-fact-db"
 license: "MIT"
 keywords:
   - "sheaf theory"

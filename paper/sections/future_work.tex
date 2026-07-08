@@ -31,6 +31,11 @@ The context poset is currently static. Supporting dynamic insertion and
 deletion of contexts would enable applications where the scoping structure
 evolves over time.
 
+\subsection{Global Fact Index for Full-Scan Queries}
+\label{sec:future:global-index}
+
+The current implementation's GLOBAL query performance degrades to 1405$\times$ slower than KG at 10K facts due to open-set iteration.  A flat fact index maintained in parallel with the sheaf structure would allow full-scan queries to bypass open-set enumeration entirely, matching KG performance while preserving LOOKUP advantages.
+
 \subsection{Compression}
 \label{sec:future:compression}
 

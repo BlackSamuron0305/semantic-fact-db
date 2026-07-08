@@ -308,6 +308,7 @@ class BlazegraphEngineAdapter(EngineAdapter):
 
     def __init__(self) -> None:
         self._available = False
+        raise NotImplementedError("Blazegraph adapter is scaffolded but not yet integrated into the benchmark pipeline")
 
     def name(self) -> str:
         return "Blazegraph"
@@ -316,16 +317,16 @@ class BlazegraphEngineAdapter(EngineAdapter):
         return EngineMetadata(name="Blazegraph", version="2.1", engine_type=EngineType.BLAZEGRAPH)
 
     def insert(self, fact: SemanticFact) -> None:
-        pass
+        raise NotImplementedError("Blazegraph adapter not implemented")
 
     def insert_batch(self, facts: list[SemanticFact]) -> None:
-        pass
+        raise NotImplementedError("Blazegraph adapter not implemented")
 
     def execute_query_str(self, query_str: str) -> list[dict[str, Any]]:
-        return []
+        raise NotImplementedError("Blazegraph adapter not implemented")
 
     def clear(self) -> None:
-        pass
+        raise NotImplementedError("Blazegraph adapter not implemented")
 
 
 class Neo4jEngineAdapter(EngineAdapter):
@@ -333,6 +334,7 @@ class Neo4jEngineAdapter(EngineAdapter):
 
     def __init__(self) -> None:
         self._available = False
+        raise NotImplementedError("Neo4j adapter is scaffolded but not yet integrated into the benchmark pipeline")
 
     def name(self) -> str:
         return "Neo4j"
@@ -341,23 +343,24 @@ class Neo4jEngineAdapter(EngineAdapter):
         return EngineMetadata(name="Neo4j", version="5.x", engine_type=EngineType.NEO4J)
 
     def insert(self, fact: SemanticFact) -> None:
-        pass
+        raise NotImplementedError("Neo4j adapter not implemented")
 
     def insert_batch(self, facts: list[SemanticFact]) -> None:
-        pass
+        raise NotImplementedError("Neo4j adapter not implemented")
 
     def execute_query_str(self, query_str: str) -> list[dict[str, Any]]:
-        return []
+        raise NotImplementedError("Neo4j adapter not implemented")
 
     def clear(self) -> None:
-        pass
+        raise NotImplementedError("Neo4j adapter not implemented")
 
 
 def create_adapters() -> dict[EngineType, EngineAdapter]:
-    return {
+    adapters: dict[EngineType, EngineAdapter] = {
         EngineType.KNOWLEDGE_GRAPH: KGEngineAdapter(),
         EngineType.SHEAF_DATABASE: SheafEngineAdapter(),
         EngineType.APACHE_JENA: JenaEngineAdapter(),
-        EngineType.BLAZEGRAPH: BlazegraphEngineAdapter(),
-        EngineType.NEO4J: Neo4jEngineAdapter(),
     }
+    # Blazegraph and Neo4j adapters are scaffolded but not yet integrated
+    # (they raise NotImplementedError on construction).
+    return adapters

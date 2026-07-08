@@ -10,23 +10,15 @@ The pipeline proceeds in four stages, each corresponding to one of the targeted 
   \item \textbf{Neighborhood (C1/C2)} --- retrieve all tuples mentioning any seed entity, with predicate filtering.
   \item \textbf{Temporal filter (C5)} --- restrict to tuples whose validity window intersects a query interval.
   \item \textbf{Provenance trace (C7)} --- walk the derivation chain for each surviving tuple to depth $d$.
-  \item \textbf{Consistency check (C8)} --- verify that the provenance DAG satisfies the cocycle condition across all overlapping annotation contexts.
+  \item \textbf{Consistency check (C8)} --- verify that the provenance DAG satisfies consistency conditions across all overlapping annotation contexts.
 \end{enumerate}
 
 \paragraph{KG approach.}
-A conventional RDF store must issue four separate SPARQL queries, each performing its own graph traversal. Intermediate results---sets of triple IDs---are materialized between stages and passed as SPARQL VALUES clauses or temporary tables. The round-trip overhead between stages, combined with repeated reification traversal in each stage, compounds quadratically as pipeline depth increases.
+A conventional RDF store must issue four separate SPARQL queries, each performing its own graph traversal. Intermediate results---sets of triple IDs---are materialized between stages and passed as SPARQL VALUES clauses or temporary tables.
 
 \paragraph{SheafDB approach.}
-SheafDB executes the full pipeline as a single optimized sheaf walk. The sheaf structure preserves entity locality (stage\,1), temporal indices are consulted during the walk without materializing intermediate results (stage\,2), provenance edges are followed via sheaf morphisms that share the walk state (stage\,3), and the cocycle condition is verified incrementally as each new context is visited (stage\,4). Shared state across stages---the set of visited entities, accumulated temporal bounds, and the growing consistency certificate---avoids redundant computation.
+SheafDB executes the full pipeline as a single optimized sheaf walk. The sheaf structure preserves entity locality (stage\,1), temporal indices are consulted during the walk without materializing intermediate results (stage\,2), provenance edges are followed via sheaf morphisms that share the walk state (stage\,3), and consistency is verified incrementally as each new context is visited (stage\,4). Shared state across stages avoids redundant computation.
 
-\paragraph{Expected performance.}
-The end-to-end SheafDB pipeline is projected to achieve a 3--10$\times$ speedup over the equivalent SPARQL pipeline at 100K-fact scale, with the gap widening at larger scales and deeper provenance chains. The primary sources of advantage are: (i) elimination of intermediate result materialization, (ii) shared temporal--provenance index walks, and (iii) incremental (rather than post-hoc) consistency verification.
-
-\input{tables/mixed_flagship_results.tex}
-
-\begin{figure}
-  \centering
-  \includegraphics{figures/flagship_breakdown.pdf}
-  \caption{Per-stage timing breakdown for the C10 flagship pipeline at 100K-fact scale. SheafDB avoids the cumulative overhead of separate SPARQL round-trips by sharing state across all four stages in a single sheaf walk.}
-  \label{fig:flagship_breakdown}
-\end{figure}
+\paragraph{Current status.}
+The individual pipeline stages correspond to the per-workload benchmarks described in Sections~\ref{sec:event_reconstruction} through~\ref{sec:consistency_global}. Per-stage LOOKUP and GLOBAL query breakdowns appear in Section~\ref{sec:evaluation}. An integrated end-to-end pipeline that chains all four stages as a single benchmark is the subject of ongoing work; the present evaluation focuses on the per-stage characterisation that exposes the fundamental LOOKUP-vs-GLOBAL tradeoff.
+\endinput

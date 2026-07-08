@@ -32,8 +32,11 @@ queries are answered through restriction maps rather than graph traversal.
           with a common canonical interface (Section~\ref{sec:implementation}).
     \item A proof of semantic equivalence via a canonical intermediate
           representation (Section~\ref{sec:correctness}).
-    \item A comprehensive benchmark evaluation comparing both representations
-          on identical workloads (Section~\ref{sec:evaluation}).
+    \item A benchmark evaluation identifying a fundamental representation
+          tradeoff: SheafDB achieves 3--30$\times$ LOOKUP speedup via
+          stalk-indexed retrieval but incurs up to 1405$\times$ overhead on
+          full-scan (GLOBAL) queries due to open-set iteration
+          (Section~\ref{sec:evaluation}).
     \item Theoretical complexity analysis identifying the regimes where
           each representation is preferred (Section~\ref{sec:complexity}).
 \end{enumerate}
