@@ -153,6 +153,7 @@ class BenchmarkRunner:
 
     def _run_storage(self) -> BenchmarkResult:
         result = self._result
+        self._adapters = create_adapters()
         for _et, adapter in self._adapters.items():
             if adapter.name() not in self.config.engines:
                 continue

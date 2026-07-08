@@ -8,8 +8,11 @@ maps rather than graph traversal.
 We implement both a realistic KG baseline and a sheaf database (SheafDB),
 prove their semantic equivalence via a canonical intermediate representation,
 and benchmark them on identical workloads.
-Our results show that SheafDB reduces join complexity for contextual queries
-but incurs higher storage overhead for highly interconnected facts.
+Our results show that SheafDB reduces LOOKUP latency by 3--30$\times$ via
+stalk-indexed retrieval while matching KG insert performance.
+However, full-scan (GLOBAL) queries are 1--1400$\times$ slower due to
+open set iteration overhead, revealing a fundamental tradeoff between
+contextual locality and global access.
 We provide theoretical guarantees for locality, gluing, and global section
 reconstruction, and discuss the conditions under which each representation
 is preferred.

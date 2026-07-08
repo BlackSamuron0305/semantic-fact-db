@@ -1,27 +1,36 @@
 \section{Conclusion}
 \label{sec:conclusion}
 
-We have presented a sheaf-theoretic approach to semantic fact storage and
-querying. Our results demonstrate that sheaf-based representations reduce
-join complexity for contextual queries at the cost of increased storage
-overhead for highly interconnected facts.
+We have presented a sheaf-theoretic approach to semantic fact storage
+and querying.  Our results demonstrate that the sheaf representation
+provides significant advantages for entity-centric LOOKUP queries
+(0.003--0.074ms vs.\ 0.008--2.279ms for KG) while matching KG insert
+performance (0.88--0.96$\times$).  However, full-scan (GLOBAL) queries
+are substantially slower due to open set iteration overhead.
 
-The formal model---based on presheaves over a finite poset of contexts with
-restriction maps and gluing---provides a rigorous foundation for contextual
-knowledge representation. The implementation demonstrates that this model
-can be realized as a working database system.
+The formal model --- based on presheaves over a finite poset of contexts
+with restriction maps and gluing --- provides a rigorous foundation for
+contextual knowledge representation.  The implementation demonstrates
+that this model can be realized as a working database system with
+verified cross-engine semantic equivalence.
 
-Our benchmark evaluation confirms that:
+Key findings:
 \begin{enumerate}
-    \item SheafDB is competitive with KG for most query types.
-    \item SheafDB excels at contextual queries with high-arity facts.
-    \item The KG representation is preferred for simple, highly interconnected
-          binary relations.
-    \item Semantic equivalence between representations is provable and
-          verifiable.
+    \item SheafDB's stalk-indexed LOOKUP is 3--30$\times$ faster than KG
+          across all tested scales.
+    \item Insert performance is comparable (SheafDB 0.88--0.96$\times$ KG).
+    \item GLOBAL (full scan) queries are 1--1400$\times$ slower, revealing
+          a need for a flat fact index in production implementations.
+    \item Cross-engine semantic equivalence is verified: both engines
+          produce identical canonical results for all query types.
+    \item The sheaf approach is best understood as a presheaf-based
+          contextual knowledge store, not as a sheaf in the strict
+          topological sense (the sheaf condition is vacuous for the
+          Alexandrov topology on a finite poset).
 \end{enumerate}
 
-The sheaf representation is preferred when queries are context-scoped and
-facts have high arity. The traditional KG representation is preferred for
-simple, highly interconnected binary relations. A hybrid approach combining
-both representations may offer the best of both worlds.
+The sheaf representation is preferred when queries are entity-centric
+and context-scoped.  The traditional KG representation is preferred for
+full-scan workloads.  A hybrid approach combining both representations
+--- using the stalk index for LOOKUP and a flat triple index for scans
+--- may offer the best of both worlds.

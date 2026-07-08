@@ -4,22 +4,31 @@
 \subsection{Interpretation of Results}
 \label{sec:discussion:interpretation}
 
-The experimental results confirm our three hypotheses.
-SheafDB outperforms the KG baseline on contextual queries because
-context-indexed section storage avoids the join overhead inherent in
-reified triple representations. For non-contextual queries involving
-highly interconnected entities, the KG's triple indexes provide more
-efficient access patterns.
+The experimental results reveal a nuanced picture.  SheafDB's
+stalk-indexed LOOKUP is orders of magnitude faster than KG's
+triple reconstruction, confirming that context-indexed section
+storage avoids join overhead for entity-centric queries.
+However, SheafDB's GLOBAL (full scan) performance is significantly
+worse because the current implementation iterates over all open
+sets rather than maintaining a flat fact index.
+
+This tradeoff is inherent to the sheaf representation: organizing
+facts by context enables fast local queries but adds overhead for
+global operations.  The paper's contribution is the approach itself
+--- a mathematically rigorous framework for contextual knowledge
+representation --- not a claim of universal performance superiority.
 
 \subsection{When SheafDB Excels}
 \label{sec:discussion:sheaf-wins}
 
 SheafDB is preferred when:
 \begin{itemize}
-    \item Queries are scoped to a specific context or context subtree.
+    \item Queries are entity-centric LOOKUPs, where the stalk index
+          provides O(1) retrieval vs.\ KG's O(k) triple reconstruction.
     \item Facts have high arity ($k \geq 4$), where reification overhead
           becomes significant.
-    \item Frequent global reconstruction from local sections is required.
+    \item Context-scoped queries benefit from restriction-map locality.
+    \item Cross-engine verification is required for data integrity.
 \end{itemize}
 
 \subsection{When KG Excels}
@@ -27,9 +36,9 @@ SheafDB is preferred when:
 
 The KG representation is preferred when:
 \begin{itemize}
-    \item Facts are predominantly binary relations.
-    \item The graph is dense with many interconnections between entities.
+    \item Full scans (GLOBAL queries) are the primary workload.
     \item The dataset is flat (single context), providing no locality benefit.
+    \item Integration with existing RDF/SPARQL infrastructure is required.
 \end{itemize}
 
 \subsection{Threats to Validity}
@@ -37,18 +46,30 @@ The KG representation is preferred when:
 
 \begin{itemize}
     \item \textbf{Implementation bias}: Both engines were implemented by the
-          same authors. The KG baseline may not reflect the performance of
+          same authors.  The KG baseline may not reflect the performance of
           mature systems like Jena or Virtuoso.
     \item \textbf{Dataset bias}: Synthetic datasets may not capture all
           characteristics of real-world knowledge graphs.
     \item \textbf{Query bias}: The benchmark query set may favor one
           representation over another.
+    \item \textbf{Scale}: Results at 10K facts are indicative but do not
+          demonstrate production-scale behavior.  Standard RDF benchmarks
+          (LUBM, BSBM) start at 100K triples.
 \end{itemize}
 
 \subsection{Negative Results}
 \label{sec:discussion:negative}
 
-SheafDB's storage overhead grows with the number of cross-context references.
-For datasets where most facts reference entities in multiple contexts, the
-restriction map index approaches the KG's triple index in size, eliminating
-the storage advantage.
+SheafDB's GLOBAL query performance degrades significantly with dataset
+size (1405$\times$ slower than KG at 10K facts).  This is because the
+current implementation iterates over all open sets to collect unique
+facts, rather than maintaining a flat fact index.  A production-quality
+implementation would add a global fact index to bypass open set
+iteration for full scans.
+
+The sheaf condition (locality + gluing) is mathematically vacuous for
+the Alexandrov topology on a finite poset, where every presheaf is
+automatically a sheaf.  The system is more accurately described as a
+presheaf database with optional consistency verification.  The value
+lies in the context-indexed organization and cross-engine verification,
+not in the sheaf condition itself.

@@ -33,6 +33,7 @@ from common.interfaces import (
     InsertResult,
     Query,
     QueryResult,
+    QueryType,
     StorageFormat,
     UpdateResult,
     VerificationResult,
@@ -294,25 +295,29 @@ class SheafDatabaseEngine(DatabaseEngine):
         year = None
         if fact.temporal is not None and fact.temporal.start is not None:
             year = str(fact.temporal.start.year)
-        for os_name in os_names:
-            self._conn.execute(
-                """INSERT OR REPLACE INTO sections
-                   (fact_id, json_data, open_set_name, context, subject, relation,
-                    provenance_source, temporal_year, confidence, inserted_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (
-                    fact.id.value,
-                    json_data,
-                    os_name,
-                    ctx_str,
-                    fact.subject.value,
-                    fact.relation.value,
-                    fact.provenance.source,
-                    year,
-                    fact.confidence,
-                    datetime.now(UTC).isoformat(),
-                ),
+        now = datetime.now(UTC).isoformat()
+        rows = [
+            (
+                fact.id.value,
+                json_data,
+                os_name,
+                ctx_str,
+                fact.subject.value,
+                fact.relation.value,
+                fact.provenance.source,
+                year,
+                fact.confidence,
+                now,
             )
+            for os_name in os_names
+        ]
+        self._conn.executemany(
+            """INSERT OR REPLACE INTO sections
+               (fact_id, json_data, open_set_name, context, subject, relation,
+                provenance_source, temporal_year, confidence, inserted_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            rows,
+        )
         self._conn.commit()
 
     def update(self, fact_id: Identifier, fact: SemanticFact) -> UpdateResult:
@@ -354,9 +359,24 @@ class SheafDatabaseEngine(DatabaseEngine):
     def query(self, query: Query) -> QueryResult:
         self._require_init()
         assert self._planner is not None
-        self._build_restriction_edges()
         t0 = time.perf_counter_ns()
         try:
+            # Fast path: LOOKUP via NeighborhoodIndex (O(1) instead of full scan)
+            if query.query_type == QueryType.LOOKUP and query.subject is not None:
+                fact_ids = self._neighborhood_index.get_fact_ids(query.subject.value)
+                facts: list[SemanticFact] = []
+                for fid in fact_ids:
+                    stalk = self._stalk_index.get(fid)
+                    if stalk is not None:
+                        for section in stalk.sections.values():
+                            facts.append(section.fact)
+                            break
+                facts = facts[:query.limit]
+                ns = time.perf_counter_ns() - t0
+                self._hooks.record_local_query(ns)
+                return QueryResult(facts=tuple(facts), execution_time_ns=ns, rows_scanned=len(facts))
+
+            self._build_restriction_edges()
             plan = self._planner.plan(query)
             result = self._planner.execute(plan, query)
             ns = time.perf_counter_ns() - t0

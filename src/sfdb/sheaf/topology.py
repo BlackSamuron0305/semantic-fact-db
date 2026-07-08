@@ -23,6 +23,9 @@ class OpenSet:
 
     The open set is the fundamental unit of the topology — it groups
     facts that are ``close'' according to some semantic criterion.
+
+    Points are stored as a mutable set internally for O(1) add/contains.
+    The ``points`` property returns a frozenset snapshot for immutability.
     """
 
     __slots__ = ("_metadata", "_name", "_points")
@@ -34,7 +37,7 @@ class OpenSet:
         metadata: dict[str, Any] | None = None,
     ) -> None:
         object.__setattr__(self, "_name", name)
-        object.__setattr__(self, "_points", points if points is not None else frozenset())
+        object.__setattr__(self, "_points", set(points) if points is not None else set())
         object.__setattr__(self, "_metadata", metadata if metadata is not None else {})
 
     @property
@@ -43,25 +46,30 @@ class OpenSet:
 
     @property
     def points(self) -> frozenset[str]:
-        return object.__getattribute__(self, "_points")
+        return frozenset(object.__getattribute__(self, "_points"))
 
     @property
     def metadata(self) -> dict[str, Any]:
         return object.__getattribute__(self, "_metadata")
 
     def contains(self, point_id: str) -> bool:
-        return point_id in self._points
+        return point_id in object.__getattribute__(self, "_points")
+
+    def add_point(self, point_id: str) -> None:
+        """Add a point to this open set in O(1)."""
+        pts = object.__getattribute__(self, "_points")
+        pts.add(point_id)
 
     def is_subset_of(self, other: OpenSet) -> bool:
-        return self._points.issubset(other._points)
+        return self.points.issubset(other.points)
 
     def intersect(self, other: OpenSet) -> OpenSet:
-        new_points = self._points & other._points
+        new_points = self.points & other.points
         new_name = f"{self._name}∩{other._name}"
         return OpenSet(new_name, new_points)
 
     def union(self, other: OpenSet) -> OpenSet:
-        new_points = self._points | other._points
+        new_points = self.points | other.points
         new_name = f"{self._name}∪{other._name}"
         return OpenSet(new_name, new_points)
 
@@ -161,16 +169,11 @@ class FiniteTopologicalSpace:
         """Add a point to an existing open set (incremental topology update).
 
         Avoids rebuilding the entire topology when inserting a single fact.
+        Uses O(1) set add instead of O(k) frozenset creation.
         """
         existing = self._open_sets.get(open_set_name)
         if existing is not None:
-            new_points = existing.points | {point_id}
-            updated = OpenSet(
-                name=existing.name,
-                points=frozenset(new_points),
-                metadata=dict(existing.metadata),
-            )
-            self._open_sets[open_set_name] = updated
+            existing.add_point(point_id)
         else:
             new_os = OpenSet(
                 name=open_set_name,

@@ -19,8 +19,14 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 
-from sfdb.common.types import Context, Fact, Identifier, SemanticType, Value
+from common.schema import SemanticFact
+from common.types import Provenance
+from sfdb.common.types import Context, Identifier, SemanticType, Value
+
+# Fixed timestamp for deterministic generation
+_FIXED_TS: datetime = datetime(2026, 1, 1, 0, 0, 0, tzinfo=UTC)
 
 
 @dataclass(slots=True, frozen=True)
@@ -73,7 +79,7 @@ class SyntheticDataset:
     entities: list[Identifier] = field(default_factory=list)
     relations: list[Identifier] = field(default_factory=list)
     contexts: list[Context] = field(default_factory=list)
-    facts: list[Fact] = field(default_factory=list)
+    facts: list[SemanticFact] = field(default_factory=list)
 
     @property
     def num_facts(self) -> int:
@@ -174,13 +180,14 @@ def generate_facts(config: SyntheticConfig) -> SyntheticDataset:
                 else:
                     objects.append(Value.literal(f"val_{rng.randint(0, 100)}"))
 
-        fact = Fact(
+        fact = SemanticFact(
             id=Identifier(f"fact_{i}"),
             subject=subject,
             relation=relation,
             objects=tuple(objects),
             context=context,
             confidence=rng.uniform(0.5, 1.0),
+            provenance=Provenance(source="synthetic", method="generated", recorded_at=_FIXED_TS),
         )
         dataset.facts.append(fact)
 
@@ -191,7 +198,7 @@ def generate_random_graph(
     num_nodes: int,
     edge_density: float,
     seed: int = 42,
-) -> list[Fact]:
+) -> list[SemanticFact]:
     """Generate a random graph as facts.
 
     Creates a set of facts representing edges in a random graph.
@@ -210,17 +217,18 @@ def generate_random_graph(
     rng = random.Random(seed)
     nodes = [Identifier(f"node_{i}") for i in range(num_nodes)]
     edge_rel = Identifier("connected_to")
-    facts: list[Fact] = []
+    facts: list[SemanticFact] = []
 
     for i in range(num_nodes):
         for j in range(i + 1, num_nodes):
             if rng.random() < edge_density:
-                fact = Fact(
+                fact = SemanticFact(
                     id=Identifier(),
                     subject=nodes[i],
                     relation=edge_rel,
                     objects=(Value.reference(nodes[j]),),
                     context=Context("world"),
+                    provenance=Provenance(source="synthetic", method="generated", recorded_at=_FIXED_TS),
                 )
                 facts.append(fact)
 

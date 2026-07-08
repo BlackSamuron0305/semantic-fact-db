@@ -1,9 +1,8 @@
 """Tests for the query optimizer."""
 
-from common.interfaces import EngineStatistics, EngineType
-from sfdb.common.types import Identifier
+from common.interfaces import EngineStatistics, EngineType, Query, QueryType
+from common.types import Identifier
 from sfdb.optimizer.optimizer import CostEstimate, OptimizationRule, QueryOptimizer, QueryPlan
-from sfdb.query.language import Query, QueryPattern, QueryType
 
 
 class TestCostEstimate:
@@ -49,18 +48,18 @@ class TestQueryOptimizer:
         self.optimizer = QueryOptimizer(kg_stats=kg_stats, sheaf_stats=sheaf_stats)
 
     def test_estimate_kg(self) -> None:
-        q = Query(type=QueryType.FACT, pattern=QueryPattern())
+        q = Query(query_type=QueryType.LOOKUP, limit=100)
         cost = self.optimizer.estimate_cost_kg(q)
         assert cost.scan_cost > 0
 
     def test_estimate_sheaf(self) -> None:
-        q = Query(type=QueryType.FACT, pattern=QueryPattern())
+        q = Query(query_type=QueryType.LOOKUP, limit=100)
         cost = self.optimizer.estimate_cost_sheaf(q)
         assert cost.scan_cost > 0
         assert cost.join_cost == 0  # Sheaf avoids joins for fact queries
 
     def test_select_plan(self) -> None:
-        q = Query(type=QueryType.FACT, pattern=QueryPattern())
+        q = Query(query_type=QueryType.LOOKUP, limit=100)
         plan, kg_cost, sheaf_cost = self.optimizer.select_plan(q)
         assert isinstance(plan, QueryPlan)
         assert kg_cost.total_cost > 0
@@ -70,12 +69,11 @@ class TestQueryOptimizer:
         optimizer = QueryOptimizer()
         rule = OptimizationRule(
             name="test_rule",
-            precondition=lambda q: q.type == QueryType.WALK,
-            transform=lambda q: Query(type=QueryType.FACT, pattern=QueryPattern(subject=q.start)),
+            precondition=lambda q: q.query_type == QueryType.PATH,
+            transform=lambda q: Query(query_type=QueryType.LOOKUP, subject=q.subject, limit=100),
         )
         optimizer.add_rule(rule)
-        # Test rule via the rewrite mechanism
-        q = Query(type=QueryType.WALK, start=Identifier("e1"), relation=Identifier("r1"))
+        q = Query(query_type=QueryType.PATH, subject=Identifier("e1"), relation=Identifier("r1"), limit=100)
         result = rule.apply(q)
         assert result is not None
-        assert result.type == QueryType.FACT
+        assert result.query_type == QueryType.LOOKUP

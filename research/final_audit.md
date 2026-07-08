@@ -89,6 +89,26 @@
 
 4. **No explicit cocycle condition (d² = 0)** — the gluing and locality checks cover this implicitly but not via formal cohomological computation.
 
+5. **Only 2 of 5 engine adapters are functional** — KG and Sheaf adapters work end-to-end with verified query equivalence. Jena adapter has partial rdflib insert support but no query execution. Blazegraph and Neo4j are stubs. The paper should honestly report "2 working adapters."
+
+6. **Sheaf condition is mathematically vacuous for the Alexandrov topology** — every presheaf on a finite poset with Alexandrov topology is automatically a sheaf. The system is a presheaf database with optional consistency verification. The paper should use "presheaf" terminology where accurate.
+
+## Benchmark Results (10K facts, verified)
+
+| Metric | KG | Sheaf | Ratio |
+|--------|----|-------|-------|
+| Insert (µs/fact) | 65 | 65 | 0.99x |
+| Q1-Q9 query (ms) | 0.15-0.22 | 0.22-0.29 | 1.3-1.5x |
+| Verification | PASS | PASS | — |
+
+Sheaf insert is competitive with KG. Query performance is slightly slower due to gluing overhead on full scans. The approach is validated: sheaf-theoretic storage works, produces correct results, and enables native n-ary fact representation without triple decomposition.
+
+## Honest Scope
+
+- **Novelty**: The canonical KG↔Sheaf mapping with injectivity proof is genuinely novel. The cross-engine verification framework is a research prototype. The partial-fact gluing algorithm is a genuine sheaf operation.
+- **Limitations**: In-memory, single-threaded, no transactions. Scale tested to 10K facts (~120K triples). No comparison against production RDF stores (Jena adapter is partial).
+- **Value proposition**: The sheaf approach provides mathematically rigorous foundations for contextual knowledge representation, native n-ary facts, and automatic consistency checking — even if raw query performance is not always superior to KG.
+
 ## Verdict
 
-**All critical claims are verified.** Every theorem has an implementation. Every implementation has tests. Every benchmark has a paper section. Every figure has a data source. The repository is reproducible from a clean clone.
+**All critical claims are verified.** Every theorem has an implementation. Every implementation has tests. The benchmark pipeline is functional and produces verified cross-engine results. The repository is reproducible from a clean clone. The paper should honestly frame the contribution as a presheaf-based approach with verified cross-engine mapping, rather than overclaiming performance advantages.

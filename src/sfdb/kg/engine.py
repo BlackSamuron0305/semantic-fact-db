@@ -550,8 +550,12 @@ class KnowledgeGraphEngine(DatabaseEngine):
         event_ids: set[int] = set()
 
         if q.query_type == QueryType.LOOKUP and q.subject is not None:
-            eid = self._encoder.encode_entity(q.subject.value)
-            rows = self._indexes.scan_spo(s=eid, p=None, o=None)
+            # In the reification scheme, the fact's subject is stored as
+            # the object of an rdf:subject triple.  Find event IDs where
+            # the object matches the queried subject.
+            subj_eid = self._encoder.encode_entity(q.subject.value)
+            pred_subj = self._encoder.encode_predicate(RDF_SUBJECT)
+            rows = self._indexes.scan_spo(s=None, p=pred_subj, o=subj_eid)
             for r in rows:
                 event_ids.add(r[4])
 
@@ -564,11 +568,14 @@ class KnowledgeGraphEngine(DatabaseEngine):
                 event_ids.add(r[4])
 
         elif q.query_type == QueryType.NEIGHBORHOOD and q.subject is not None:
-            eid = self._encoder.encode_entity(q.subject.value)
-            rows = self._indexes.scan_spo(s=eid, p=None, o=None)
+            subj_eid = self._encoder.encode_entity(q.subject.value)
+            pred_subj = self._encoder.encode_predicate(RDF_SUBJECT)
+            # Find facts where this entity is the subject
+            rows = self._indexes.scan_spo(s=None, p=pred_subj, o=subj_eid)
             for r in rows:
                 event_ids.add(r[4])
-            rows2 = self._indexes.scan_spo(s=None, p=None, o=eid)
+            # Also find facts where this entity appears as an object reference
+            rows2 = self._indexes.scan_spo(s=None, p=None, o=subj_eid)
             for r in rows2:
                 event_ids.add(r[4])
 

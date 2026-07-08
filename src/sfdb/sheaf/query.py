@@ -155,28 +155,14 @@ class SheafQueryPlanner:
             facts = facts[: query.limit]
 
         elif classification.level == QueryClassification.GLOBAL:
-            cached = self._cache.list_all()
-            if cached:
-                for gs in cached:
-                    if self._matches_query(gs.fact, query):
-                        facts.append(gs.fact)
-                        self._optimizer.cache_hit(gs.fact.id.value)
-            else:
-                self._optimizer.cache_miss()
-                global_sections = self._presheaf.compute_global_sections()
-                if global_sections:
-                    for gs in global_sections:
-                        self._cache.add(gs)
-                        if self._matches_query(gs.fact, query):
-                            facts.append(gs.fact)
-                else:
-                    seen: set[str] = set()
-                    for sections in self._presheaf._sections_by_openset.values():
-                        for ls in sections.values():
-                            if ls.fact.id.value not in seen:
-                                seen.add(ls.fact.id.value)
-                                if self._matches_query(ls.fact, query):
-                                    facts.append(ls.fact)
+            # Return all unique facts (not just global sections)
+            seen: set[str] = set()
+            for sections in self._presheaf._sections_by_openset.values():
+                for ls in sections.values():
+                    if ls.fact.id.value not in seen:
+                        seen.add(ls.fact.id.value)
+                        if self._matches_query(ls.fact, query):
+                            facts.append(ls.fact)
 
         facts = facts[query.offset : query.offset + query.limit]
         ns = time.perf_counter_ns() - t0

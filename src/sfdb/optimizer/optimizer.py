@@ -40,8 +40,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum, auto
 
-from common.interfaces import EngineStatistics, EngineType
-from sfdb.query.language import Query, QueryType
+from common.interfaces import EngineStatistics, EngineType, Query, QueryType
 
 
 class QueryPlan(Enum):
@@ -137,12 +136,12 @@ class QueryOptimizer:
         scan_cost = triple_count
 
         join_cost = 0.0
-        if query.type == QueryType.WALK:
-            # Walk: each step follows avg_facts_per_entity edges
-            join_cost = float(query.max_depth) * avg_facts_per_entity
-        elif query.type == QueryType.JOIN:
-            # Join: pairwise comparison of entity neighborhoods
-            join_cost = float(len(query.entities)) ** 2 * avg_facts_per_entity
+        if query.query_type == QueryType.PATH:
+            # Path: each step follows avg_facts_per_entity edges
+            join_cost = float(query.limit) * avg_facts_per_entity
+        elif query.query_type == QueryType.NEIGHBORHOOD:
+            # Neighborhood: scan entity + its connections
+            join_cost = avg_facts_per_entity ** 2
 
         # Reconstruction: each fact requires avg_triples_per_fact lookups
         reconstruction_cost = scan_cost * 0.1 * avg_triples_per_fact
@@ -166,23 +165,22 @@ class QueryOptimizer:
         avg_sections_per_context = sel.get("avg_sections_per_context", 1.0)
         avg_sections_per_fact = sel.get("avg_sections_per_fact", 1.0)
 
-        if query.type in (QueryType.FACT, QueryType.WALK):
+        if query.query_type in (QueryType.LOOKUP,):
             # Sheaf only scans sections local to the context
             scan_cost = avg_sections_per_context
             join_cost = 0.0  # No decomposition → no joins needed
             reconstruction_cost = 0.0  # Sections are already complete
-        elif query.type == QueryType.JOIN:
-            # Joins still require scanning in sheaf, but can be
-            # localized to specific contexts
+        elif query.query_type == QueryType.NEIGHBORHOOD:
+            # Neighborhood: scan entity's open sets
             scan_cost = section_count
-            join_cost = float(len(query.entities)) * avg_sections_per_context
+            join_cost = avg_sections_per_context
             reconstruction_cost = 0.0
-        elif query.type == QueryType.CONTEXT:
+        elif query.query_type == QueryType.CONTEXT:
             # Context query: only scan the relevant context
             scan_cost = avg_sections_per_context
             join_cost = 0.0
             reconstruction_cost = 0.0
-        elif query.type == QueryType.GLOBAL:
+        elif query.query_type == QueryType.GLOBAL:
             # Global query: must scan everything and glue
             scan_cost = section_count
             join_cost = 0.0
