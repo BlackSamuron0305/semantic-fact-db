@@ -14,6 +14,7 @@ import typer
 
 from sfdb.benchmark.runner import BenchmarkConfig, BenchmarkRunner
 from sfdb.common.types import Identifier
+from sfdb.datasets.lubm import LUBMConfig, LUBMGenerator
 from sfdb.datasets.synthetic import SyntheticConfig, generate_facts
 from sfdb.query.language import Query, QueryPattern, QueryType
 from sfdb.utils.logging import setup_logging
@@ -81,6 +82,60 @@ def run(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(results, indent=2))
     typer.echo(f"Results saved to {output_path}")
+
+
+@app.command()
+def lubm(
+    num_universities: int = typer.Option(1, help="Number of universities to generate"),
+    output: str = typer.Option("results/lubm_benchmark.json", help="Output path"),
+    num_runs: int = typer.Option(3, help="Number of benchmark runs"),
+) -> None:
+    """Run benchmarks on LUBM dataset (Lehigh University Benchmark).
+
+    Provides an indirect comparison against published Jena, Virtuoso,
+    and Blazegraph results.
+    """
+    from sfdb.benchmark.runner import BenchmarkConfig, BenchmarkRunner
+
+    # Generate LUBM dataset
+    lubm_config = LUBMConfig(num_universities=num_universities, seed=42)
+    generator = LUBMGenerator(lubm_config)
+    facts = generator.generate()
+    typer.echo(f"Generated {len(facts)} LUBM facts ({num_universities} university(s))")
+
+    # Create LOOKUP and WALK queries from LUBM data
+    queries = []
+    if facts:
+        # Point lookup on first fact's subject
+        queries.append(Query(
+            type=QueryType.FACT,
+            pattern=QueryPattern(subject=facts[0].subject),
+        ))
+        # Walk query if we have at least one relation
+        if len(facts) > 1:
+            queries.append(Query(
+                type=QueryType.WALK,
+                start=facts[0].subject,
+                relation=Identifier("rdf:type"),
+                max_depth=2,
+            ))
+
+    # Run benchmark
+    bench_config = BenchmarkConfig(
+        name=f"lubm_{num_universities}u",
+        queries=tuple(queries),
+        num_runs=num_runs,
+        seed=42,
+        output_dir="results",
+    )
+    runner = BenchmarkRunner(bench_config)
+    runner.initialize(facts)
+    result = runner.run()
+
+    output_path = Path(output)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(result.to_dict(), indent=2))
+    typer.echo(f"LUBM benchmark results saved to {output_path}")
 
 
 @app.command()
