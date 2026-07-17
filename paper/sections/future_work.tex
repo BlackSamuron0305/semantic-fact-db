@@ -8,15 +8,12 @@ useful.
 \subsection{A Flat Temporal Index for Unbounded Ranges}
 \label{sec:future:global-index}
 
-An earlier iteration of this evaluation found that GLOBAL queries were the
-design's weak point, because the query path enumerated topology open sets
-rather than the flat stalk index the engine already builds for LOOKUP
-queries; we implemented that fix during this project and it is reflected
-in Section~\ref{sec:evaluation} (see Section~\ref{sec:discussion:interpretation}
-for the full account). The same class of gap remains for TEMPORAL queries
-with an open-ended range (Section~\ref{sec:discussion:temporal-unbounded}):
-the year-bucketed temporal index has no bounded candidate set to fall back
-on, so it degrades toward consulting every bucket. A flat, sorted temporal
+The GLOBAL-query fix (Section~\ref{sec:discussion:interpretation}) is
+already implemented and reflected in Section~\ref{sec:evaluation}; the
+same class of gap remains for TEMPORAL queries with an open-ended range
+(Section~\ref{sec:discussion:temporal-unbounded}): the year-bucketed
+temporal index has no bounded candidate set to fall back on, so it
+degrades toward consulting every bucket. A flat, sorted temporal
 index (an interval tree, or a sorted array of (start, end) pairs searched
 by binary search) alongside the bucketed one would let an unbounded query
 binary-search to its starting point and scan forward, rather than

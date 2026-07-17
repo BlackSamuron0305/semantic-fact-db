@@ -67,7 +67,7 @@ Temporal Range (unbounded) & $O(T)$ & $O(N)$ \\
 
 \paragraph{Entity Lookup.} KG locates every triple mentioning the entity through
 its POS index and reassembles each matching fact from its reified triples.
-SheafDB resolves the entity to a candidate fact-id set via the neighbourhood
+SFDB resolves the entity to a candidate fact-id set via the neighbourhood
 index in expected $O(1)$ per candidate, then returns a stalk-index lookup per
 candidate fact --- also $O(1)$ each, since every stalk holds exactly one
 section. Both engines are implemented as genuine hash-based lookups; the
@@ -78,7 +78,7 @@ side rather than by asymptotic complexity.
 \paragraph{Full Scan (GLOBAL).} An unrestricted query that must return every
 fact. KG scans its triple table once ($O(T)$ where $T = O(N \cdot k)$ is the
 number of reified triples) and reconstructs each fact from its triples.
-SheafDB iterates the flat stalk index directly ($O(N)$), since every fact is
+SFDB iterates the flat stalk index directly ($O(N)$), since every fact is
 registered in exactly one stalk regardless of how many topology open sets it
 also belongs to. An earlier iteration of this design answered GLOBAL queries
 by enumerating every open set a fact could appear in and de-duplicating,
@@ -87,7 +87,7 @@ number of open sets per fact --- correct but strictly dominated by the flat
 index that was already being maintained for entity lookups. We describe this
 correction in Section~\ref{sec:discussion:interpretation}.
 
-\paragraph{Context Lookup.} KG requires an index scan; SheafDB performs a direct
+\paragraph{Context Lookup.} KG requires an index scan; SFDB performs a direct
 open set lookup with context-to-open-set index.
 
 \paragraph{Restriction.} Given a fact $f$ with arity $k$ and contexts $c \leq d$:
@@ -152,7 +152,7 @@ Indices & $O(T)$ via SPO/POS/OSP & $O(N + |\mathcal{C}|)$ via context hash \\
 \end{table}
 
 KG stores each reified fact as $2+k$ triples, each indexed in up to three
-lookup tables --- a $3\times$ index amplification. SheafDB stores each fact once
+lookup tables --- a $3\times$ index amplification. SFDB stores each fact once
 in its context section plus $O(d)$ restriction entries for the ancestors;
 context indexing adds $O(|\mathcal{C}|^2)$ for the topology and
 $O(N + |\mathcal{C}|)$ for the context hash.
@@ -164,19 +164,21 @@ These bounds are tested empirically by the benchmark framework
 (Section~\ref{sec:evaluation}):
 
 \begin{enumerate}
-    \item SheafDB insertion is typically $O(d)$ vs.\ KG's $O(k \log T)$ for contexts
+    \item SFDB insertion is typically $O(d)$ vs.\ KG's $O(k \log T)$ for contexts
           of depth $d$; empirically SFDB matches or slightly beats KG insert
-          latency at every scale up to $10^4$ facts.
-    \item SheafDB LOOKUP queries are faster than KG's reified-triple
-          reconstruction at every scale measured ($20$--$25\times$ at $10^4$
-          facts), consistent with both being $O(1)$-per-candidate lookups
-          with a KG-side constant-factor penalty from SQLite round trips.
-    \item SheafDB GLOBAL queries are faster than KG's triple-table scan at
-          every scale measured ($50$--$100\times$ at $10^4$ facts), once the
-          query path uses the flat stalk index rather than open-set
-          enumeration; this reverses what an earlier, buggy implementation
-          measured, as discussed in Section~\ref{sec:discussion:interpretation}.
-    \item SheafDB's temporal index gives a modest speedup ($1.2$--$1.6\times$)
+          latency at every scale up to $10^4$ facts (up to $1.35\times$
+          faster, narrowing to near-parity at $100$ facts).
+    \item SFDB LOOKUP queries are faster than KG's reified-triple
+          reconstruction at every scale measured ($21$--$32\times$ across
+          $10^2$--$10^4$ facts), consistent with both being $O(1)$-per-candidate
+          lookups with a KG-side constant-factor penalty from SQLite round trips.
+    \item SFDB GLOBAL queries are faster than KG's triple-table scan at
+          every scale measured ($44$--$95\times$ across $10^2$--$10^4$
+          facts), once the query path uses the flat stalk index rather
+          than open-set enumeration; this reverses what an earlier, buggy
+          implementation measured, as discussed in
+          Section~\ref{sec:discussion:interpretation}.
+    \item SFDB's temporal index gives a modest speedup ($1.2$--$1.6\times$)
           on bounded ranges but degrades below KG's flat scan-and-filter on
           unbounded ranges, exactly as the $O(y \cdot n_y)$ vs.\ $O(N)$
           bounds above predict.

@@ -5,8 +5,8 @@
 \label{sec:discussion:interpretation}
 
 The measurements in Section~\ref{sec:evaluation} show SFDB faster than the
-KG baseline on every query class measured: $20$--$25\times$ on LOOKUP,
-$50$--$100\times$ on GLOBAL, and $1.2$--$1.6\times$ on bounded TEMPORAL
+KG baseline on every query class measured: $21$--$32\times$ on LOOKUP,
+$44$--$95\times$ on GLOBAL, and $1.2$--$1.6\times$ on bounded TEMPORAL
 queries, at essentially matched insert latency. This was not the paper's
 original finding. An earlier iteration of this evaluation reported GLOBAL
 queries as SFDB's weak point --- up to three orders of magnitude slower
@@ -141,16 +141,42 @@ We identify four threats that a careful reader should weigh.
 \end{description}
 
 We also record, in the interest of showing our work rather than only its
-conclusion: two implementation bugs were found and fixed during this
-evaluation as a direct result of tightening the cross-engine verification
-harness described in Section~\ref{sec:correctness}, and one further
-performance bug (an $O(N)$ linear scan standing in for a dictionary lookup
-in the KG engine's identifier decoder) was found and fixed by inspecting
-the code paths the benchmark exercised. All three fixes are reflected in
-the numbers reported in Section~\ref{sec:evaluation}; none of them was
-found by the evaluation methodology in isolation, which is itself a threat
-to validity worth naming: a less careful reading of the same benchmark
-output would have reported the pre-fix numbers as a stable finding.
+conclusion, that three bugs were found and fixed during this evaluation,
+by three different mechanisms, none of which was the evaluation
+methodology catching itself automatically:
+
+\begin{enumerate}
+    \item The sheaf engine's LOOKUP path silently used neighbourhood
+          (any-mention) match semantics instead of strict subject match.
+          This one genuinely was caught by the cross-engine verification
+          harness described in Section~\ref{sec:correctness}, after we
+          tightened it from a positional, stringified comparison to an
+          order-independent, type-preserving one: the two engines'
+          canonical result sets stopped agreeing, which is exactly what
+          the harness is for.
+    \item The GLOBAL open-set enumeration inefficiency that produced an
+          earlier draft's headline negative result (Section~\ref{sec:discussion:interpretation})
+          was \emph{not} caught by the harness, because both engines
+          already agreed on which facts a GLOBAL query returned before the
+          fix --- they disagreed only on how long it took. It was found by
+          inspecting the query path and noticing a cheaper index was
+          already being maintained elsewhere for LOOKUP.
+    \item A linear scan standing in for a dictionary lookup in the KG
+          engine's identifier decoder was found the same way, by code
+          inspection rather than by any automated check, and had been
+          inflating the KG engine's own reconstruction cost on every
+          query class that touches reified triples.
+\end{enumerate}
+
+All three fixes are reflected in the numbers reported in
+Section~\ref{sec:evaluation}. That only the first was actually caught by
+an automated check is itself a threat to validity worth naming plainly:
+the verification harness is real and it does its job, but it checks
+result equivalence, not performance, and it cannot catch an inefficiency
+that both engines agree is merely slow. A less careful reading of the
+same benchmark output --- one that trusted the harness to have caught
+everything worth catching --- would have reported the pre-fix numbers as
+a stable finding.
 
 \subsection{Negative Results}
 \label{sec:discussion:negative}
@@ -173,13 +199,13 @@ the range has no upper bound, because the year-bucketed index cannot
 narrow an unbounded query and falls back to consulting every bucket it has
 ever created.
 
-The third is the vacuousness of the sheaf condition in our setting. On a
-finite poset with the Alexandrov topology, every presheaf is automatically a
-sheaf; locality and gluing hold because the covers under consideration are
-trivial. The system is, strictly, a presheaf database with a defensive
-consistency check. This does not diminish the practical value of the design:
-what makes the design work is the context poset, the stalk index, the
-canonical intermediate representation, and the disciplined restriction
-vocabulary that comes with them. It does mean that any framing of the paper
+The third is the vacuousness of the sheaf condition in our setting
+(Section~\ref{sec:sheaf-remark}): the system is, strictly, a presheaf
+database with a defensive consistency check, not a sheaf database in any
+technical sense that would constitute a contribution on its own. This does
+not diminish the practical value of the design: what makes the design work
+is the context poset, the stalk index, the canonical intermediate
+representation, and the disciplined restriction vocabulary that comes with
+them. It does mean that any framing of the paper
 as a sheaf-theoretic breakthrough would be dishonest, and we do not adopt
 that framing.

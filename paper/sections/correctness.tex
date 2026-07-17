@@ -73,6 +73,17 @@ $\mathfrak{R}_{\Sigma_{\mathrm{KG}}}(Q) = \mathfrak{R}_{\Sigma_{\mathrm{Sh}}}(Q)
 for every $Q$.
 \end{proof}
 
+The "correctness property of the two query evaluators" that the proof
+sketch invokes --- that each engine's internal match predicate actually
+implements the denotational semantics $\models Q$ it is supposed to ---
+is assumed here, not derived from the formal model above it; the model
+gives no way to check it other than running both evaluators and looking.
+That this assumption can fail in practice, and did, is exactly what
+Section~\ref{sec:eval:verification} describes: the theorem constrains
+what a correct pair of evaluators must agree on, but it is the harness
+below, not this proof, that checks whether a given pair of evaluators is
+in fact correct.
+
 The theorem is not merely stated but enforced operationally: the benchmark
 runner instantiates both engines from the same fact stream, executes every
 query on both, canonicalises the results, and refuses to record any latency

@@ -65,14 +65,25 @@ several indexes concurrently:
 \begin{description}
     \item[Open-set index] maps a context $c$ to the set of local sections
           that live in the open set $\downarrow c$;
-    \item[Stalk index] maps an entity identifier to the set of contexts in
-          which the entity appears; this is the index consulted by
-          entity-centric LOOKUP queries;
+    \item[Stalk index] maps a fact identifier directly to its stalk (its
+          section); this is the flat, $O(1)$-lookup structure that answers
+          both entity-anchored LOOKUP queries (Definition~\ref{def:stalk},
+          once narrowed to a candidate fact by the neighbourhood index
+          below) and, since every fact has exactly one stalk regardless of
+          how many open sets it belongs to, unrestricted GLOBAL queries
+          (Section~\ref{sec:eval:query});
+    \item[Neighbourhood index] maps an entity identifier to the set of
+          fact identifiers that mention it, whether as subject or as an
+          object reference; a LOOKUP query resolves its anchor entity
+          through this index to a candidate set, then keeps only the
+          candidates whose subject --- not just whose objects --- match,
+          before returning each surviving candidate's stalk;
     \item[Restriction index] caches restriction maps $\rho_{V, U}$ for the
           $(V, U)$ pairs that have been requested during query execution;
-    \item[Neighbourhood index] records, for each context, its immediate
-          parents and children in the poset, so that neighbourhood queries
-          walk the poset instead of scanning all sections;
+    \item[Restriction graph] records the directed acyclic graph of open-set
+          inclusions, used by the planner to route SEMI-LOCAL queries
+          (context, temporal, and provenance lookups) to the open sets
+          they can be answered from;
     \item[Global section cache] memoises the most recent global-section
           reconstruction and is invalidated on insert.
 \end{description}

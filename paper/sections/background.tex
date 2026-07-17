@@ -1,7 +1,20 @@
 \section{Background}
 \label{sec:background}
 
-This section reviews the mathematical background required for the paper.
-Readers familiar with sheaf theory may skip to Section~\ref{sec:system-architecture}.
-
-\input{sections/mathematical_foundations.tex}
+This section names, at a high level, the mathematical ideas the formal
+model in Section~\ref{sec:mathematical_model} specialises to our setting;
+it does not restate them as separate definitions, to avoid maintaining two
+descriptions of the same structure. A poset $(\mathcal{C}, \leq)$ of
+contexts carries the \emph{Alexandrov topology}: a subset is open iff it is
+downward-closed under $\leq$, so that every point has a smallest open
+neighbourhood. A \emph{presheaf} on $\mathcal{C}$ assigns a set of local
+sections to each context together with restriction maps that specialise a
+section from a broader context to a narrower one; a \emph{sheaf} is a
+presheaf additionally satisfying locality and gluing. On the finite,
+Alexandrov-topologised poset we use, both axioms hold vacuously, which is
+why Section~\ref{sec:sheaf-remark} treats this as a presheaf database that
+borrows sheaf-theoretic vocabulary rather than as a claim of a non-trivial
+sheaf-theoretic result. Section~\ref{sec:mathematical_model} gives the
+precise, paper-specific versions of context, presheaf, restriction, stalk,
+and global section that the implementation and the equivalence proof
+(Section~\ref{sec:correctness}) actually use.

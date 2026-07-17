@@ -66,12 +66,14 @@ and $\mathcal{T} \subseteq \mathcal{P}(X)$ satisfies:
     \item $U, V \in \mathcal{T} \implies U \cap V \in \mathcal{T}$ (finite intersection).
     \item $\{U_i\}_{i \in I} \subseteq \mathcal{T} \implies \bigcup_i U_i \in \mathcal{T}$ (arbitrary union).
 \end{enumerate}
-In SheafDB, $X = \mathcal{I}$ (fact identifiers) and $\mathcal{T}$ is generated
+In SFDB, $X = \mathcal{I}$ (fact identifiers) and $\mathcal{T}$ is generated
 by the Alexandrov topology on $(\mathcal{C}, \leq)$.
 \end{definition}
 
 \paragraph{Remark.}
-On a finite poset equipped with the Alexandrov topology, every presheaf satisfies the sheaf condition (locality + gluing) automatically.  The sheaf condition is therefore vacuous for our construction.  We retain the terminology because it correctly describes the categorical structure; the contribution lies in the presheaf-based organisation of facts over a context poset, the stalk-indexed query evaluation, and the cross-engine verification framework --- not in the satisfaction of the sheaf condition.
+Section~\ref{sec:sheaf-remark}, immediately below, explains why the sheaf
+condition holds vacuously on this topology and is not the paper's
+technical contribution; we do not repeat that argument here.
 
 \begin{definition}[Open Set]
 \label{def:openset}
@@ -114,13 +116,13 @@ with $x \in W$ and $s|_W = t|_W$.
 \begin{definition}[Local Section]
 \label{def:localsection}
 A \emph{local section} is $s \in F(U)$ for a proper open subset $U \subsetneq X$.
-In SheafDB, a local section is a fact whose context $c < \top$.
+In SFDB, a local section is a fact whose context $c < \top$.
 \end{definition}
 
 \begin{definition}[Global Section]
 \label{def:globalsection}
 A \emph{global section} is $s \in F(X)$ over the whole space.
-In SheafDB, this is a fact valid in the root context $\top$.
+In SFDB, this is a fact valid in the root context $\top$.
 Computed by collecting local sections, checking compatibility on overlaps,
 and gluing upward until $\top$ is reached.
 \end{definition}
