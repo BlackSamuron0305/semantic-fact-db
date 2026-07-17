@@ -5,17 +5,24 @@ Several concrete extensions would improve either the design or the
 credibility of the evaluation. We list them in the order we consider
 useful.
 
-\subsection{A Flat Fact Index for Full Scans}
+\subsection{A Flat Temporal Index for Unbounded Ranges}
 \label{sec:future:global-index}
 
-The GLOBAL query penalty reported in Section~\ref{sec:evaluation} is due to
-open-set enumeration. Maintaining a flat fact index in parallel with the
-sheaf structure would let unrestricted scans bypass the open-set walk
-entirely and match the KG baseline on GLOBAL queries while preserving the
-stalk-indexed advantage on LOOKUP. The engineering cost is modest: an
-additional insert-time write per fact and a small amount of additional
-memory. This is the single change most likely to remove the paper's most
-prominent negative result, and it would be our first extension.
+An earlier iteration of this evaluation found that GLOBAL queries were the
+design's weak point, because the query path enumerated topology open sets
+rather than the flat stalk index the engine already builds for LOOKUP
+queries; we implemented that fix during this project and it is reflected
+in Section~\ref{sec:evaluation} (see Section~\ref{sec:discussion:interpretation}
+for the full account). The same class of gap remains for TEMPORAL queries
+with an open-ended range (Section~\ref{sec:discussion:temporal-unbounded}):
+the year-bucketed temporal index has no bounded candidate set to fall back
+on, so it degrades toward consulting every bucket. A flat, sorted temporal
+index (an interval tree, or a sorted array of (start, end) pairs searched
+by binary search) alongside the bucketed one would let an unbounded query
+binary-search to its starting point and scan forward, rather than
+consulting every year bucket the index has ever created. This is the
+single change most likely to remove the paper's remaining query-latency
+negative result, and it would be our first extension.
 
 \subsection{Real-World Datasets and Standard Benchmarks}
 \label{sec:future:real-data}
@@ -56,10 +63,17 @@ restriction-map protocol.
 \subsection{Compression of Contextually Redundant Data}
 \label{sec:future:compression}
 
+Section~\ref{sec:eval:memory} reports that SFDB uses $1.3$--$4.8\times$
+more resident memory per fact than the KG baseline, because each fact is
+registered in roughly eight to ten open sets plus four auxiliary indexes.
 Sections that share a common context or that agree under restriction on a
 large sub-tree admit context-aware compression schemes that are not
-available to a flat triple store. Realising this would reduce the storage
-overhead identified in Section~\ref{sec:evaluation}.
+available to a flat triple store: rather than storing a full section
+reference per open set, a fact could store one canonical reference plus a
+small bitset of the open sets it belongs to, reconstructed on read.
+Realising this would directly reduce the memory overhead identified in
+Section~\ref{sec:eval:memory}, which is currently the paper's primary
+reported cost.
 
 \subsection{Hybrid Storage}
 \label{sec:future:hybrid}

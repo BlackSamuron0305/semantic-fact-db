@@ -10,14 +10,26 @@ same canonical schema, and a mechanised proof of semantic equivalence
 binds the two engines together: every insert and every query is checked,
 online, for canonical result equality.
 
-The evaluation on ten workloads at three scales yields a clear tradeoff.
-Inserts are essentially identical on the two engines. Entity-anchored
-LOOKUP queries are $3$--$30\times$ faster on the sheaf-inspired engine
-because the stalk index removes the need for triple reassembly.
-Unrestricted GLOBAL queries are up to $1\,405\times$ slower on the
-sheaf-inspired engine because the current implementation iterates open
-sets instead of maintaining a flat fact index. We report the negative
-result plainly and describe the extension that would eliminate it.
+The evaluation, on three query classes and insert throughput at three
+scales, yields a clear result and a clear tradeoff. Inserts are essentially
+identical on the two engines. Entity-anchored LOOKUP queries are
+$20$--$25\times$ faster on the sheaf-inspired engine because the stalk
+index removes the need for triple reassembly; unrestricted GLOBAL queries
+are $50$--$100\times$ faster once that same flat index is used instead of
+enumerating topology open sets; and bounded temporal-interval queries are
+$1.2$--$1.6\times$ faster via the engine's year-bucketed temporal index.
+The tradeoff that funds these advantages is memory: SFDB uses
+$1.3$--$4.8\times$ more resident memory per fact than the reified-triple
+baseline, and an unbounded temporal range degrades SFDB's advantage
+because the bucketed index has no way to narrow it. We report both
+plainly. We also report that an earlier version of this evaluation found
+GLOBAL queries to be SFDB's weak point by three orders of magnitude, and
+that this was an implementation gap rather than an architectural one; the
+tightened verification harness built for this paper caught a related
+semantic bug in the same code path. We treat the fact that our own
+evaluation needed correcting, and that the harness caught the correction,
+as part of the paper's evidence rather than as an embarrassment to
+suppress.
 
 The formal apparatus in the paper is that of presheaves on a finite poset.
 We do not claim a novel sheaf-theoretic theorem: on the Alexandrov topology

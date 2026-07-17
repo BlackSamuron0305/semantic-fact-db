@@ -93,14 +93,16 @@ class BenchmarkRunner:
                     else self.config.num_runs_warm
                 )
 
-                for run_idx in range(runs):
-                    if self.config.cache == CacheMode.COLD:
-                        adapter.clear()
-                        if hasattr(self._adapters, "keys"):
-                            for other_et, other_adapter in self._adapters.items():
-                                if other_et != et:
-                                    other_adapter.clear()
+                # Warm-up iterations are untimed and discarded, so first-call
+                # effects (lazy init, cold caches) don't leak into the
+                # reported means. The dataset itself is inserted once by
+                # initialize() and must survive across every timed run —
+                # engine.drop()/clear() must never be called here, or every
+                # run after the first would measure an empty database.
+                for _ in range(self.config.warm_up):
+                    adapter.execute_query_str(wl.text)
 
+                for run_idx in range(runs):
                     with MeasuredRun(label=f"{engine_name}_{wl.id}_{run_idx}") as mr:
                         adapter.execute_query_str(wl.text)
 
@@ -134,21 +136,32 @@ class BenchmarkRunner:
         return result
 
     def _verify_across_engines(self, workloads: list[QueryWorkload]) -> None:
+        log = logging.getLogger(__name__)
         all_ok = True
         for wl in workloads:
             results: dict[str, Any] = {}
+            errors: dict[str, str] = {}
             for _et, adapter in self._adapters.items():
                 if adapter.name() in self.config.engines:
                     try:
-                        qs = wl.text
-                        results[adapter.name()] = adapter.execute_query_str(qs)
-                    except Exception:
-                        pass
+                        results[adapter.name()] = adapter.execute_query_str(wl.text)
+                    except Exception as exc:
+                        errors[adapter.name()] = repr(exc)
+            for engine_name, err in errors.items():
+                all_ok = False
+                log.warning("Verification query errored for %s on %s: %s", wl.id, engine_name, err)
             if len(results) >= 2:
                 v = verify_equivalence(results)
                 if not v.passed:
                     all_ok = False
-                    logging.warning("Verification failed for %s: %s", wl.id, v.message)
+                    log.warning("Verification failed for %s: %s", wl.id, v.message)
+            elif not errors:
+                all_ok = False
+                log.warning(
+                    "Verification skipped for %s: fewer than 2 engines produced results (%s)",
+                    wl.id,
+                    list(results.keys()),
+                )
         self._result.verification = VerificationResult(all_ok)
 
     def _run_storage(self) -> BenchmarkResult:
@@ -195,7 +208,6 @@ class BenchmarkRunner:
                 run_count = max(self.config.num_runs_cold, 5)
                 metrics_list: list[SystemMetrics] = []
                 for run_idx in range(run_count):
-                    adapter.clear()
                     with MeasuredRun(label=f"{engine_name}_{wl.id}_{run_idx}") as mr:
                         adapter.execute_query_str(wl.text)
                     sm = mr.metrics()

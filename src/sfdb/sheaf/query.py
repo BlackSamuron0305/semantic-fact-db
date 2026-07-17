@@ -14,16 +14,42 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 
 from common.interfaces import (
     Query,
     QueryResult,
+    QueryType,
 )
 from common.schema import SemanticFact
-from sfdb.sheaf.indexes import GlobalSectionCache
+from common.types import Context
+from sfdb.sheaf.indexes import GlobalSectionCache, StalkIndex
 from sfdb.sheaf.optimizer import QueryClassification, SheafOptimizer
 from sfdb.sheaf.presheaf import GlobalSection, LocalSection, Presheaf
 from sfdb.sheaf.restriction import RestrictionGraph
+
+
+def _parse_temporal_token(token: str) -> datetime:
+    """Parse a temporal query bound: either a bare year ("2024") or a
+    full ISO datetime string."""
+    if len(token) == 4 and token.isdigit():
+        return datetime(int(token), 1, 1, tzinfo=UTC)
+    return datetime.fromisoformat(token)
+
+
+def _temporal_query_bounds(
+    start_token: str | None, end_token: str | None
+) -> tuple[datetime | None, datetime | None]:
+    """Resolve a query's temporal_start/temporal_end into concrete bounds.
+
+    A bare-year start with no end is shorthand for that whole year,
+    e.g. temporal_start="2024" alone means [2024-01-01, 2025-01-01).
+    """
+    q_start = _parse_temporal_token(start_token) if start_token else None
+    q_end = _parse_temporal_token(end_token) if end_token else None
+    if q_start is not None and q_end is None and len(start_token) == 4 and start_token.isdigit():
+        q_end = datetime(q_start.year + 1, 1, 1, tzinfo=UTC)
+    return q_start, q_end
 
 
 @dataclass
@@ -61,11 +87,13 @@ class SheafQueryPlanner:
         optimizer: SheafOptimizer,
         cache: GlobalSectionCache,
         restriction_graph: RestrictionGraph,
+        stalk_index: StalkIndex | None = None,
     ) -> None:
         self._presheaf = presheaf
         self._optimizer = optimizer
         self._cache = cache
         self._restriction_graph = restriction_graph
+        self._stalk_index = stalk_index
 
     def plan(self, query: Query) -> SheafPlan:
         """Produce an execution plan for *query*."""
@@ -138,7 +166,8 @@ class SheafQueryPlanner:
                     sections = [
                         s
                         for s in sections
-                        if s.fact.subject == query.subject or s.fact.id == query.subject
+                        if s.fact.subject.value == query.subject.value
+                        or s.fact.id.value == query.subject.value
                     ]
                 for s in sections[: query.limit]:
                     facts.append(s.fact)
@@ -155,14 +184,22 @@ class SheafQueryPlanner:
             facts = facts[: query.limit]
 
         elif classification.level == QueryClassification.GLOBAL:
-            # Return all unique facts (not just global sections)
-            seen: set[str] = set()
-            for sections in self._presheaf._sections_by_openset.values():
-                for ls in sections.values():
-                    if ls.fact.id.value not in seen:
-                        seen.add(ls.fact.id.value)
+            # Return all unique facts via the flat stalk index (O(N) in the
+            # number of facts) instead of enumerating every open set, which
+            # would revisit each fact once per open set it belongs to.
+            if self._stalk_index is not None:
+                for stalk in self._stalk_index.all_stalks():
+                    for ls in stalk.sections.values():
                         if self._matches_query(ls.fact, query):
                             facts.append(ls.fact)
+            else:
+                seen: set[str] = set()
+                for sections in self._presheaf._sections_by_openset.values():
+                    for ls in sections.values():
+                        if ls.fact.id.value not in seen:
+                            seen.add(ls.fact.id.value)
+                            if self._matches_query(ls.fact, query):
+                                facts.append(ls.fact)
 
         facts = facts[query.offset : query.offset + query.limit]
         ns = time.perf_counter_ns() - t0
@@ -177,7 +214,21 @@ class SheafQueryPlanner:
             return False
         if query.relation is not None and fact.relation != query.relation:
             return False
-        return not (query.context != "world" and str(fact.context) != query.context)
+        if query.query_type == QueryType.TEMPORAL and (query.temporal_start or query.temporal_end):
+            if fact.temporal is None:
+                return False
+            q_start, q_end = _temporal_query_bounds(query.temporal_start, query.temporal_end)
+            f_start, f_end = fact.temporal.start, fact.temporal.end
+            if q_end is not None and f_start is not None and f_start >= q_end:
+                return False
+            if q_start is not None and f_end is not None and f_end <= q_start:
+                return False
+        if query.context == "world":
+            return True
+        # A query anchored at a broader context should also match facts
+        # stated in any of its sub-contexts (the topology builder adds
+        # ancestor open sets for exactly this reason).
+        return fact.context.is_subcontext(Context(query.context))
 
 
 @dataclass(frozen=True)

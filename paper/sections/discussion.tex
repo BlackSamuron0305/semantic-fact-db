@@ -4,17 +4,37 @@
 \subsection{What the Results Do and Do Not Show}
 \label{sec:discussion:interpretation}
 
-The measurements in Section~\ref{sec:evaluation} tell a two-sided story.
-Where the query anchors an entity and the engine can answer it through
-a single hash lookup into the stalk index, SFDB is between $3\times$ and
-$30\times$ faster than a reified triple store on comparable hardware and at
-comparable engineering effort. Where the query has no anchor and the engine
-must produce every fact in the store, SFDB is up to three orders of magnitude
-\emph{slower} than the KG baseline because it enumerates open sets rather
-than a flat table. These two facts are not in tension: they are two sides of
-the same decision. Once one commits to indexing by context, one must decide
-what to do when a query does not use that index. The current implementation
-does the naive thing; the remedy is straightforward and outlined below.
+The measurements in Section~\ref{sec:evaluation} show SFDB faster than the
+KG baseline on every query class measured: $20$--$25\times$ on LOOKUP,
+$50$--$100\times$ on GLOBAL, and $1.2$--$1.6\times$ on bounded TEMPORAL
+queries, at essentially matched insert latency. This was not the paper's
+original finding. An earlier iteration of this evaluation reported GLOBAL
+queries as SFDB's weak point --- up to three orders of magnitude slower
+than the KG baseline --- because the query path enumerated topology open
+sets rather than a flat fact index. That earlier finding was correct as a
+measurement and wrong as an architectural conclusion: the open-set
+enumeration was an implementation choice, not a consequence of
+context-indexing, and a flat stalk index the engine already builds for
+LOOKUP queries answers GLOBAL queries directly once the query path is
+changed to use it (a change of roughly fifteen lines). We fixed it, and the
+numbers in Section~\ref{sec:evaluation} reflect the fix. We describe the
+earlier finding and the fix here rather than silently updating the number,
+because the fact that the original measurement was real but the conclusion
+drawn from it was not is itself informative: an implementation-level
+inefficiency in a code path can look, from the outside, exactly like a
+fundamental tradeoff until someone checks whether a cheaper path already
+exists elsewhere in the same system.
+
+The tradeoff this paper does report, and that survives this scrutiny, is
+memory: SFDB uses $1.3$--$4.8\times$ more resident memory per fact than the
+KG baseline (Section~\ref{sec:eval:memory}). This is a structural
+consequence of the design, not an implementation oversight --- every fact
+is registered in roughly eight to ten open sets plus four auxiliary
+indexes, and each registration holds a live reference into memory rather
+than a compact encoded row. Reducing it would require either coarsening
+the topology (fewer open sets per fact) or compressing the index
+structures (Section~\ref{sec:future:compression}), both of which would
+likely give back some of the latency advantage.
 
 We do not claim, and the data do not support, that the sheaf-inspired
 approach dominates a mature RDF store on every workload at every scale. Our
@@ -24,6 +44,28 @@ and canonicalisation pipeline. It is a controlled reference, not a
 state-of-the-art. Any claim about how SFDB would fare against Jena TDB2 or
 Virtuoso must wait for a comparable evaluation, which we identify as future
 work.
+
+\subsection{The Cost of an Unbounded Temporal Range}
+\label{sec:discussion:temporal-unbounded}
+
+The TEMPORAL results in Section~\ref{sec:evaluation} use a query bounded on
+both ends (a one-year window), which is the case the year-bucketed
+temporal index is built for. An open-ended query (a start bound with no
+end, "everything from year $X$ onward") cannot be narrowed to a bounded set
+of year buckets, so the classifier that selects candidate open sets falls
+back to consulting every year the index has ever seen. In our own
+measurement at $10^4$ facts, this degrades SFDB's TEMPORAL latency by
+roughly $40\times$ relative to the bounded case, to the point of being
+slower than the KG baseline rather than faster. This is a second genuine,
+architecture-level limitation, distinct from the GLOBAL enumeration bug
+described above: it is not a fifteen-line fix, because there is no bounded
+candidate set to compute. A production version of the design would need
+either a flat, sorted temporal index (an interval tree or a sorted array
+searched by binary search) alongside the bucketed one, used specifically
+for open-ended ranges, or an explicit fallback to the flat stalk scan used
+for GLOBAL queries. We did not implement this because it was outside the
+scope of what this evaluation set out to measure, but we record it here
+rather than let the bounded-range result stand unqualified.
 
 \subsection{When the Design Helps}
 \label{sec:discussion:sheaf-wins}
@@ -38,21 +80,29 @@ the context poset: the open-set index turns such scoping into an index seek
 rather than a filter over a triple stream. Fourth, the application requires
 verifiable data integrity across representations: the canonical layer and
 cross-engine verification harness make it cheap to run the same fact
-stream through both engines and catch inconsistencies.
+stream through both engines and catch inconsistencies. Fifth, and
+contrary to our own earlier expectation, unrestricted full-table scans
+are not actually a case where the KG baseline has an advantage once the
+GLOBAL query path uses the same flat index as LOOKUP; the design
+constraint that remains is memory, not access pattern.
 
 \subsection{When the KG Baseline Helps}
 \label{sec:discussion:kg-wins}
 
-The reified triple representation wins in the workloads that the SFDB
-design was not built for. Unrestricted GLOBAL scans that must touch every
-fact are one such case: a flat triple table is the natural structure for
-that access pattern, and the current SFDB implementation pays a substantial
-penalty. Workloads that are essentially binary---where facts genuinely are
-subject-predicate-object triples with no context, no arity, and no
-provenance---get no benefit from the sheaf structure and only pay the
-overhead of maintaining the extra indexes. Finally, integration with the
-extensive existing RDF and SPARQL tooling ecosystem is currently only
-possible on the KG side.
+The reified triple representation still wins in workloads that the SFDB
+design was not built for, even though it no longer wins on the GLOBAL and
+TEMPORAL classes reported in Section~\ref{sec:evaluation}. An open-ended
+temporal range, as described above, is one concrete case where SFDB's
+indexing advantage degrades and the KG baseline's simpler scan-and-filter
+approach is no worse. More generally, workloads that are essentially
+binary---where facts genuinely are subject-predicate-object triples with
+no context, no arity, and no provenance---get no benefit from the sheaf
+structure and only pay the memory overhead of maintaining the extra
+indexes documented in Section~\ref{sec:eval:memory}, for no corresponding
+latency win. Any workload where memory is the binding constraint rather
+than latency favours the KG baseline's more compact reified storage.
+Finally, integration with the extensive existing RDF and SPARQL tooling
+ecosystem is currently only possible on the KG side.
 
 \subsection{Threats to Validity}
 \label{sec:discussion:threats}
@@ -76,11 +126,13 @@ We identify four threats that a careful reader should weigh.
           LUBM~\cite{guo2005lubm} and DBpedia is the natural next step.
 
     \item[Query bias.] Our query set was designed with both engines in
-          mind. It includes queries where each engine is expected to do
-          well and where each is expected to struggle. A different query
-          mix would shift the aggregate numbers, but the qualitative
-          story---stalk indexing helps LOOKUP, open-set iteration hurts
-          GLOBAL---would not change without a design change.
+          mind: one anchor-based class (LOOKUP), one no-anchor class
+          (GLOBAL), and one range-based class (TEMPORAL). A different query
+          mix would shift the aggregate numbers, and Section~\ref{sec:discussion:temporal-unbounded}
+          shows explicitly that varying a single parameter of the TEMPORAL
+          class (whether the range is bounded) is enough to flip which
+          engine is faster. We do not claim the three classes measured here
+          are exhaustive.
 
     \item[Scale.] All measurements are at $10^4$ facts or below. Standard
           RDF benchmarks start at $10^5$ triples. Our design choices are
@@ -88,20 +140,40 @@ We identify four threats that a careful reader should weigh.
           but empirically our claims are bounded at $10^4$.
 \end{description}
 
+We also record, in the interest of showing our work rather than only its
+conclusion: two implementation bugs were found and fixed during this
+evaluation as a direct result of tightening the cross-engine verification
+harness described in Section~\ref{sec:correctness}, and one further
+performance bug (an $O(N)$ linear scan standing in for a dictionary lookup
+in the KG engine's identifier decoder) was found and fixed by inspecting
+the code paths the benchmark exercised. All three fixes are reflected in
+the numbers reported in Section~\ref{sec:evaluation}; none of them was
+found by the evaluation methodology in isolation, which is itself a threat
+to validity worth naming: a less careful reading of the same benchmark
+output would have reported the pre-fix numbers as a stable finding.
+
 \subsection{Negative Results}
 \label{sec:discussion:negative}
 
-Two negative results deserve to be stated plainly, because they discipline
-the paper's overall claim.
+Three negative results deserve to be stated plainly, because they
+discipline the paper's overall claim.
 
-The first is the GLOBAL scan penalty of up to $1\,405\times$ at $10\,000$
-facts. It arises from an implementation choice (open-set enumeration
-instead of a flat fact index) and is not intrinsic to the sheaf-inspired
-design. Section~\ref{sec:future:global-index} sketches a fix. Until that fix
-lands, SFDB is not an appropriate choice for workloads dominated by
-unrestricted scans.
+The first is the memory cost quantified in Section~\ref{sec:eval:memory}:
+SFDB uses $1.3$--$4.8\times$ more resident memory per fact than the KG
+baseline. This is the tradeoff that funds every latency advantage reported
+in this paper, and it is intrinsic to the design rather than an
+implementation artefact: redundant per-open-set registration is what makes
+the stalk and temporal indexes cheap to query.
 
-The second is the vacuousness of the sheaf condition in our setting. On a
+The second is the degradation of TEMPORAL performance under an
+open-ended range, described in
+Section~\ref{sec:discussion:temporal-unbounded}: SFDB's advantage on
+bounded ranges (a $1.2$--$1.6\times$ speedup) inverts to a slowdown once
+the range has no upper bound, because the year-bucketed index cannot
+narrow an unbounded query and falls back to consulting every bucket it has
+ever created.
+
+The third is the vacuousness of the sheaf condition in our setting. On a
 finite poset with the Alexandrov topology, every presheaf is automatically a
 sheaf; locality and gluing hold because the covers under consideration are
 trivial. The system is, strictly, a presheaf database with a defensive

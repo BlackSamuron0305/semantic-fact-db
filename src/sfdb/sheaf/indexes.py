@@ -31,21 +31,23 @@ class OpenSetIndex:
 
     def __init__(self) -> None:
         self._sets: dict[str, set[str]] = {}
+        self._sets_by_fact: dict[str, set[str]] = defaultdict(set)
 
     def add(self, open_set_name: str, fact_id: str) -> None:
         if open_set_name not in self._sets:
             self._sets[open_set_name] = set()
         self._sets[open_set_name].add(fact_id)
+        self._sets_by_fact[fact_id].add(open_set_name)
 
     def get_fact_ids(self, open_set_name: str) -> frozenset[str]:
         return frozenset(self._sets.get(open_set_name, set()))
 
     def get_open_sets_for(self, fact_id: str) -> list[str]:
-        return [name for name, ids in self._sets.items() if fact_id in ids]
+        return list(self._sets_by_fact.get(fact_id, ()))
 
     def remove(self, fact_id: str) -> None:
-        for ids in self._sets.values():
-            ids.discard(fact_id)
+        for name in self._sets_by_fact.pop(fact_id, ()):
+            self._sets[name].discard(fact_id)
 
     def count(self) -> int:
         return sum(len(ids) for ids in self._sets.values())
@@ -207,6 +209,9 @@ class TemporalIndex:
 
     def get_fact_ids(self, year: str) -> frozenset[str]:
         return frozenset(self._year_to_facts.get(year, set()))
+
+    def years(self) -> list[str]:
+        return list(self._year_to_facts.keys())
 
     def count(self) -> int:
         return sum(len(ids) for ids in self._year_to_facts.values())

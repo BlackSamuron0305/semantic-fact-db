@@ -55,6 +55,14 @@ class EngineAdapter(ABC):
     @abstractmethod
     def clear(self) -> None: ...
 
+    def execute_query(self, query: Query) -> list[SemanticFact]:
+        """Execute a typed Query directly, bypassing text parsing.
+
+        Not all adapters can support this (e.g. rdflib-backed ones that
+        only speak SPARQL text); the default raises NotImplementedError.
+        """
+        raise NotImplementedError(f"{type(self).__name__} does not support typed Query execution")
+
 
 class KGEngineAdapter(EngineAdapter):
     """Adapter for KnowledgeGraphEngine.
@@ -145,6 +153,9 @@ class KGEngineAdapter(EngineAdapter):
         self._engine.drop()
         self._engine.create()
 
+    def execute_query(self, query: Query) -> list[SemanticFact]:
+        return list(self._engine.query(query).facts)
+
 
 class SheafEngineAdapter(EngineAdapter):
     """Adapter for SheafDatabaseEngine.
@@ -217,6 +228,9 @@ class SheafEngineAdapter(EngineAdapter):
     def clear(self) -> None:
         self._engine.drop()
         self._engine.create()
+
+    def execute_query(self, query: Query) -> list[SemanticFact]:
+        return list(self._engine.query(query).facts)
 
 
 class JenaEngineAdapter(EngineAdapter):

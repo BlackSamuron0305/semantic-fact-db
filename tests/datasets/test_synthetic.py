@@ -39,6 +39,7 @@ class TestGenerateFacts:
         config = SyntheticConfig(
             num_entities=10,
             num_facts=100,
+            min_arity=1,
             max_arity=3,
             arity_distribution=(0.0, 0.5, 0.5),  # Only arity 2 and 3
             seed=42,

@@ -1,11 +1,16 @@
-"""Generate benchmark figures for the SFDB paper.
+"""Generate benchmark figures for the SFDB paper from real results.
 
-Produces publication-quality PDF figures using matplotlib.
-Uses a clean blue/orange categorical scheme (colorblind-safe).
+Reads results/paper_suite_summary.json (produced by `uv run sfdb
+benchmark`) and produces publication-quality PDF figures with matplotlib.
+Uses a clean blue/orange categorical scheme (colorblind-safe). Run
+scripts/generate_tables.py's sibling `uv run sfdb benchmark` first if the
+summary file does not exist or is stale.
 """
 
 from __future__ import annotations
 
+import json
+import sys
 from pathlib import Path
 
 import matplotlib
@@ -20,24 +25,46 @@ SHEAF_COLOR = "#DD8452"
 KG_COLOR_LIGHT = "#8DB0D8"
 SHEAF_COLOR_LIGHT = "#E8B97A"
 
-FIGS_DIR = Path(__file__).resolve().parent.parent / "paper" / "figures"
+REPO_ROOT = Path(__file__).resolve().parent.parent
+FIGS_DIR = REPO_ROOT / "paper" / "figures"
 FIGS_DIR.mkdir(parents=True, exist_ok=True)
+SUMMARY_PATH = REPO_ROOT / "results" / "paper_suite_summary.json"
 
-# Data
-sizes = [100, 1000, 10000]
-sizes_str = ["100", "1K", "10K"]
+QUERY_CLASSES = ("LOOKUP", "GLOBAL", "TEMPORAL")
 
-# LOOKUP latency (ms)
-kg_lookup = [0.008, 0.520, 2.279]
-sh_lookup = [0.003, 0.007, 0.074]
 
-# GLOBAL latency (ms)
-kg_global = [3.359, 3.718, 7.403]
-sh_global = [3.244, 91.081, 10407.0]
+def load_summary() -> dict:
+    if not SUMMARY_PATH.exists():
+        print(f"error: {SUMMARY_PATH} not found. Run `uv run sfdb benchmark` first.", file=sys.stderr)
+        sys.exit(1)
+    return json.loads(SUMMARY_PATH.read_text())
 
-# Insert latency (ms)
-kg_insert = [5.8, 59.0, 651.1]
-sh_insert = [5.1, 54.1, 627.0]
+
+def sizes_from(summary: dict) -> list[int]:
+    return sorted(int(n) for n in summary["query"])
+
+
+def size_labels(sizes: list[int]) -> list[str]:
+    return [f"{n // 1000}K" if n >= 1000 else str(n) for n in sizes]
+
+
+def means(summary: dict, qclass: str, sizes: list[int]) -> tuple[list[float], list[float]]:
+    kg = [summary["query"][str(n)][qclass]["stats"]["KnowledgeGraph"]["mean"] for n in sizes]
+    sh = [summary["query"][str(n)][qclass]["stats"]["SheafDatabase"]["mean"] for n in sizes]
+    return kg, sh
+
+
+def insert_means(summary: dict, sizes: list[int]) -> tuple[list[float], list[float]]:
+    kg = [summary["insert"][str(n)]["KnowledgeGraph"]["mean"] for n in sizes]
+    sh = [summary["insert"][str(n)]["SheafDatabase"]["mean"] for n in sizes]
+    return kg, sh
+
+
+def memory_means_mb(summary: dict, sizes: list[int]) -> tuple[list[float], list[float]]:
+    mem = summary.get("insert_memory_bytes", {})
+    kg = [mem.get(str(n), {}).get("KnowledgeGraph", 0.0) / 1e6 for n in sizes]
+    sh = [mem.get(str(n), {}).get("SheafDatabase", 0.0) / 1e6 for n in sizes]
+    return kg, sh
 
 
 def save(fig: plt.Figure, name: str) -> None:
@@ -47,130 +74,152 @@ def save(fig: plt.Figure, name: str) -> None:
     print(f"  Saved {path}")
 
 
-def latency_chart() -> None:
-    """Latency comparison: KG vs Sheaf for LOOKUP and GLOBAL."""
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(8, 4), sharey=False)
-
+def latency_chart(summary: dict, sizes: list[int], labels: list[str]) -> None:
+    """Latency comparison: KG vs SFDB for LOOKUP, GLOBAL, TEMPORAL."""
+    fig, axes = plt.subplots(1, 3, figsize=(11, 4), sharey=False)
     x = np.arange(len(sizes))
     w = 0.35
 
-    # LOOKUP subplot
-    ax1.bar(x - w / 2, kg_lookup, w, label="KG", color=KG_COLOR, edgecolor="white", linewidth=0.5)
-    ax1.bar(x + w / 2, sh_lookup, w, label="SheafDB", color=SHEAF_COLOR, edgecolor="white", linewidth=0.5)
-    ax1.set_xticks(x)
-    ax1.set_xticklabels(sizes_str)
-    ax1.set_xlabel("Dataset size (facts)")
-    ax1.set_ylabel("Latency (ms)")
-    ax1.set_title("LOOKUP Query")
-    ax1.legend(fontsize=8)
-    ax1.set_yscale("log")
-    ax1.grid(axis="y", alpha=0.3, linestyle=":")
-
-    # GLOBAL subplot
-    ax2.bar(x - w / 2, kg_global, w, label="KG", color=KG_COLOR, edgecolor="white", linewidth=0.5)
-    ax2.bar(x + w / 2, sh_global, w, label="SheafDB", color=SHEAF_COLOR, edgecolor="white", linewidth=0.5)
-    ax2.set_xticks(x)
-    ax2.set_xticklabels(sizes_str)
-    ax2.set_xlabel("Dataset size (facts)")
-    ax2.set_ylabel("Latency (ms)")
-    ax2.set_title("GLOBAL Query")
-    ax2.legend(fontsize=8)
-    ax2.set_yscale("log")
-    ax2.grid(axis="y", alpha=0.3, linestyle=":")
+    for ax, qclass in zip(axes, QUERY_CLASSES):
+        kg, sh = means(summary, qclass, sizes)
+        ax.bar(x - w / 2, kg, w, label="KG", color=KG_COLOR, edgecolor="white", linewidth=0.5)
+        ax.bar(x + w / 2, sh, w, label="SheafDB", color=SHEAF_COLOR, edgecolor="white", linewidth=0.5)
+        ax.set_xticks(x)
+        ax.set_xticklabels(labels)
+        ax.set_xlabel("Dataset size (facts)")
+        ax.set_ylabel("Latency (ms)")
+        ax.set_title(f"{qclass} Query")
+        ax.legend(fontsize=8)
+        ax.set_yscale("log")
+        ax.grid(axis="y", alpha=0.3, linestyle=":")
 
     fig.suptitle("Query Latency: KG vs SheafDB", fontsize=12, y=1.02)
     fig.tight_layout()
     save(fig, "latency.pdf")
 
 
-def throughput_chart() -> None:
+def throughput_chart(summary: dict, sizes: list[int], labels: list[str]) -> None:
     """Insert throughput comparison."""
     fig, ax = plt.subplots(figsize=(6, 4))
-
+    kg, sh = insert_means(summary, sizes)
     x = np.arange(len(sizes))
     w = 0.35
 
-    ax.bar(x - w / 2, kg_insert, w, label="KG", color=KG_COLOR, edgecolor="white", linewidth=0.5)
-    ax.bar(x + w / 2, sh_insert, w, label="SheafDB", color=SHEAF_COLOR, edgecolor="white", linewidth=0.5)
+    ax.bar(x - w / 2, kg, w, label="KG", color=KG_COLOR, edgecolor="white", linewidth=0.5)
+    ax.bar(x + w / 2, sh, w, label="SheafDB", color=SHEAF_COLOR, edgecolor="white", linewidth=0.5)
     ax.set_xticks(x)
-    ax.set_xticklabels(sizes_str)
+    ax.set_xticklabels(labels)
     ax.set_xlabel("Dataset size (facts)")
     ax.set_ylabel("Insert time (ms)")
     ax.set_title("Insert Throughput")
     ax.legend(fontsize=10)
     ax.grid(axis="y", alpha=0.3, linestyle=":")
 
-    # Annotate ratio
     for i in range(len(sizes)):
-        ratio = sh_insert[i] / kg_insert[i]
-        mid = (kg_insert[i] + sh_insert[i]) / 2
+        ratio = sh[i] / kg[i] if kg[i] else float("nan")
+        mid = (kg[i] + sh[i]) / 2
         ax.annotate(f"{ratio:.2f}x", (x[i], mid), ha="center", va="bottom", fontsize=8, fontweight="bold")
 
     fig.tight_layout()
     save(fig, "throughput.pdf")
 
 
-def speedup_chart() -> None:
-    """Speedup ratio: Sheaf / KG. Below 1 = Sheaf faster, above 1 = KG faster."""
-    fig, ax = plt.subplots(figsize=(6, 4))
-
-    lookup_ratio = [s / k for s, k in zip(sh_lookup, kg_lookup)]
-    global_ratio = [s / k for s, k in zip(sh_global, kg_global)]
-
+def speedup_chart(summary: dict, sizes: list[int], labels: list[str]) -> None:
+    """Speedup ratio: SFDB / KG per query class. Below 1 = SFDB faster."""
+    fig, ax = plt.subplots(figsize=(7, 4))
     x = np.arange(len(sizes))
-    w = 0.35
+    w = 0.25
+    colors = [KG_COLOR, SHEAF_COLOR, "#55A868"]
 
-    ax.bar(x - w / 2, lookup_ratio, w, label="LOOKUP", color=KG_COLOR, edgecolor="white", linewidth=0.5)
-    ax.bar(x + w / 2, global_ratio, w, label="GLOBAL", color=SHEAF_COLOR, edgecolor="white", linewidth=0.5)
+    for i, qclass in enumerate(QUERY_CLASSES):
+        kg, sh = means(summary, qclass, sizes)
+        ratio = [s / k if k else float("nan") for s, k in zip(sh, kg)]
+        offset = (i - 1) * w
+        ax.bar(x + offset, ratio, w, label=qclass, color=colors[i], edgecolor="white", linewidth=0.5)
+        for xi, r in zip(x, ratio):
+            ax.annotate(f"{r:.2f}x", (xi + offset, r), ha="center",
+                        va="bottom" if r < 1 else "top", fontsize=6)
+
     ax.axhline(y=1.0, color="gray", linestyle="--", linewidth=0.8, label="Parity")
-
     ax.set_xticks(x)
-    ax.set_xticklabels(sizes_str)
+    ax.set_xticklabels(labels)
     ax.set_xlabel("Dataset size (facts)")
-    ax.set_ylabel("SheafDB / KG ratio")
-    ax.set_title("Speedup Ratio (below 1 = SheafDB faster)")
-    ax.legend(fontsize=9)
+    ax.set_ylabel("SheafDB / KG latency ratio")
+    ax.set_title("Speedup Ratio by Query Class (below 1 = SheafDB faster)")
+    ax.legend(fontsize=8)
     ax.set_yscale("log")
     ax.grid(axis="y", alpha=0.3, linestyle=":")
-
-    # Annotate values
-    for i in range(len(sizes)):
-        ax.annotate(f"{lookup_ratio[i]:.2f}x", (x[i] - w / 2, lookup_ratio[i]), ha="center", va="bottom" if lookup_ratio[i] < 1 else "top", fontsize=7)
-        ax.annotate(f"{global_ratio[i]:.1f}x", (x[i] + w / 2, global_ratio[i]), ha="center", va="bottom" if global_ratio[i] < 1 else "top", fontsize=7)
 
     fig.tight_layout()
     save(fig, "speedup.pdf")
 
 
-def scalability_chart() -> None:
-    """Scalability: latency vs dataset size for both engines."""
-    fig, ax = plt.subplots(figsize=(6, 4))
+def scalability_chart(summary: dict, sizes: list[int], labels: list[str]) -> None:
+    """Scalability: latency vs dataset size for both engines, all classes."""
+    fig, ax = plt.subplots(figsize=(6.5, 4.5))
+    markers = {"LOOKUP": "s", "GLOBAL": "^", "TEMPORAL": "d"}
+    kg_colors = {"LOOKUP": KG_COLOR, "GLOBAL": KG_COLOR, "TEMPORAL": KG_COLOR}
+    sh_colors = {"LOOKUP": SHEAF_COLOR, "GLOBAL": SHEAF_COLOR, "TEMPORAL": SHEAF_COLOR}
 
-    ax.plot(sizes, kg_lookup, "o-", color=KG_COLOR, label="KG LOOKUP", linewidth=1.5, markersize=6)
-    ax.plot(sizes, sh_lookup, "s-", color=SHEAF_COLOR, label="SheafDB LOOKUP", linewidth=1.5, markersize=6)
-    ax.plot(sizes, kg_global, "o--", color=KG_COLOR_LIGHT, label="KG GLOBAL", linewidth=1.5, markersize=6)
-    ax.plot(sizes, sh_global, "s--", color=SHEAF_COLOR_LIGHT, label="SheafDB GLOBAL", linewidth=1.5, markersize=6)
+    for qclass in QUERY_CLASSES:
+        kg, sh = means(summary, qclass, sizes)
+        ax.plot(sizes, kg, marker=markers[qclass], linestyle="-", color=kg_colors[qclass],
+                label=f"KG {qclass}", linewidth=1.3, markersize=6, alpha=0.9)
+        ax.plot(sizes, sh, marker=markers[qclass], linestyle="--", color=sh_colors[qclass],
+                label=f"SheafDB {qclass}", linewidth=1.3, markersize=6, alpha=0.9)
 
     ax.set_xscale("log")
     ax.set_yscale("log")
     ax.set_xticks(sizes)
-    ax.set_xticklabels(sizes_str)
+    ax.set_xticklabels(labels)
     ax.set_xlabel("Dataset size (facts)")
     ax.set_ylabel("Latency (ms)")
     ax.set_title("Scalability: Latency vs Dataset Size")
-    ax.legend(fontsize=8)
+    ax.legend(fontsize=7, ncol=2)
     ax.grid(True, alpha=0.3, linestyle=":")
 
     fig.tight_layout()
     save(fig, "scalability.pdf")
 
 
+def memory_chart(summary: dict, sizes: list[int], labels: list[str]) -> None:
+    """Resident memory delta from inserting N facts."""
+    fig, ax = plt.subplots(figsize=(6, 4))
+    kg, sh = memory_means_mb(summary, sizes)
+    x = np.arange(len(sizes))
+    w = 0.35
+
+    ax.bar(x - w / 2, kg, w, label="KG", color=KG_COLOR, edgecolor="white", linewidth=0.5)
+    ax.bar(x + w / 2, sh, w, label="SheafDB", color=SHEAF_COLOR, edgecolor="white", linewidth=0.5)
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels)
+    ax.set_xlabel("Dataset size (facts)")
+    ax.set_ylabel("Resident memory delta (MB)")
+    ax.set_title("Memory Footprint: KG vs SheafDB")
+    ax.legend(fontsize=10)
+    ax.grid(axis="y", alpha=0.3, linestyle=":")
+
+    for i in range(len(sizes)):
+        ratio = sh[i] / kg[i] if kg[i] else float("nan")
+        mid = max(kg[i], sh[i])
+        ax.annotate(f"{ratio:.2f}x", (x[i], mid), ha="center", va="bottom", fontsize=8, fontweight="bold")
+
+    fig.tight_layout()
+    save(fig, "memory.pdf")
+
+
 def main() -> None:
+    print("Loading results/paper_suite_summary.json...")
+    summary = load_summary()
+    sizes = sizes_from(summary)
+    labels = size_labels(sizes)
+
     print("Generating figures...")
-    latency_chart()
-    throughput_chart()
-    speedup_chart()
-    scalability_chart()
+    latency_chart(summary, sizes, labels)
+    throughput_chart(summary, sizes, labels)
+    speedup_chart(summary, sizes, labels)
+    scalability_chart(summary, sizes, labels)
+    memory_chart(summary, sizes, labels)
     print("Done.")
 
 

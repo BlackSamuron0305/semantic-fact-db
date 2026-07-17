@@ -5,7 +5,7 @@ Usage:
     sfdb ingest [--format json|parquet] FILE
     sfdb import [--format json|parquet] FILE
     sfdb export [--format json|parquet] [--output FILE]
-    sfdb benchmark [--config FILE] [--workloads C1,C2,...]
+    sfdb benchmark [--size tiny|small|medium] [--runs N] [--warm-up N]
     sfdb profile [--config FILE]
     sfdb verify
     sfdb doctor
@@ -133,32 +133,39 @@ def export_data(
 
 @app.command()
 def benchmark(
-    config: Optional[str] = typer.Option(None, "--config", "-c", help="Benchmark config file"),
-    workloads: Optional[str] = typer.Option(None, "--workloads", "-w", help="Comma-separated workload IDs"),
-    size: str = typer.Option("small", "--size", "-s", help="Dataset size (small, medium, large)"),
+    size: Optional[str] = typer.Option(
+        None, "--size", "-s",
+        help="Run a single scale only (tiny=100, small=1000, medium=10000). "
+             "Omit to run the full paper suite (100, 1000, 10000).",
+    ),
+    runs: int = typer.Option(10, "--runs", help="Timed runs per query class / insert."),
+    warm_up: int = typer.Option(2, "--warm-up", help="Untimed warm-up iterations before timing."),
+    output_dir: str = typer.Option("results", "--output-dir", "-o", help="Output directory."),
 ) -> None:
-    """Run the benchmark suite."""
-    from sfdb.benchmark.contextual.runner import ContextualBenchConfig, ContextualBenchRunner
+    """Run the paper's benchmark suite: insert throughput plus LOOKUP,
+    GLOBAL, and TEMPORAL query classes against real KnowledgeGraph and
+    SheafDatabase engines, with cross-engine verification on every
+    query class at every scale. This is the same command referenced in
+    paper/sections/artifact.tex to reproduce the paper's numbers.
+    """
+    from sfdb.benchmark.paper_suite import PAPER_SCALES, run_paper_suite
 
-    cfg = _load_config(config) if config else {}
-    wl_list = [w.strip() for w in workloads.split(",")] if workloads else [
-        "C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8", "C9", "C10"
-    ]
+    size_to_n = {"tiny": 100, "small": 1000, "medium": 10000}
+    if size and size not in size_to_n:
+        typer.echo(f"Unknown --size {size!r}; choose from {list(size_to_n)}", err=True)
+        raise typer.Exit(1)
+    scales = (size_to_n[size],) if size else PAPER_SCALES
 
-    runner = ContextualBenchRunner(ContextualBenchConfig(
-        dataset_size=size,
-        workloads=tuple(wl_list),
-        num_runs=3,
-        output_dir=cfg.get("output_dir", "results/contextual"),
-    ))
-    typer.echo(f"Generating dataset ({size})...")
-    runner.generate_dataset()
-    typer.echo(f"Running {len(wl_list)} workloads...")
-    reporter = runner.run()
-    paths = runner.export()
-    typer.echo(f"Results written to:")
-    for name, p in paths.items():
-        typer.echo(f"  {name}: {p}")
+    typer.echo(f"Running benchmark suite at scales {scales} ({runs} runs, {warm_up} warm-up)")
+    result = run_paper_suite(
+        output_dir=output_dir, scales=scales, num_runs=runs, warm_up=warm_up
+    )
+
+    status = "PASSED" if result["all_verified"] else "FAILED"
+    typer.echo(f"Cross-engine verification: {status}")
+    typer.echo(f"Results written to {output_dir}/paper_suite.* and paper_suite_summary.json")
+    if not result["all_verified"]:
+        raise typer.Exit(1)
 
 
 @app.command()

@@ -62,6 +62,29 @@ SFDB_ATTR_PREFIX = "sfdb:attr_"
 OBJECT_TYPE_ENTITY = "entity"
 OBJECT_TYPE_LITERAL = "literal"
 
+
+def _parse_temporal_token(token: str) -> datetime:
+    """Parse a temporal query bound: either a bare year ("2024") or a
+    full ISO datetime string."""
+    if len(token) == 4 and token.isdigit():
+        return datetime(int(token), 1, 1, tzinfo=UTC)
+    return datetime.fromisoformat(token)
+
+
+def _temporal_query_bounds(
+    start_token: str | None, end_token: str | None
+) -> tuple[datetime | None, datetime | None]:
+    """Resolve a query's temporal_start/temporal_end into concrete bounds.
+
+    A bare-year start with no end is shorthand for that whole year,
+    e.g. temporal_start="2024" alone means [2024-01-01, 2025-01-01).
+    """
+    q_start = _parse_temporal_token(start_token) if start_token else None
+    q_end = _parse_temporal_token(end_token) if end_token else None
+    if q_start is not None and q_end is None and len(start_token) == 4 and start_token.isdigit():
+        q_end = datetime(q_start.year + 1, 1, 1, tzinfo=UTC)
+    return q_start, q_end
+
 # ---------------------------------------------------------------------------
 # Helper types
 # ---------------------------------------------------------------------------
@@ -120,6 +143,9 @@ class DictionaryEncoder:
         self._entity_cache: dict[str, int] = {}
         self._predicate_cache: dict[str, int] = {}
         self._literal_cache: dict[str, int] = {}
+        self._entity_reverse: dict[int, str] = {}
+        self._predicate_reverse: dict[int, str] = {}
+        self._literal_reverse: dict[int, tuple[str, str]] = {}
 
     def create_tables(self) -> None:
         self._conn.executescript("""
@@ -144,10 +170,13 @@ class DictionaryEncoder:
     def _load_caches(self) -> None:
         for row in self._conn.execute("SELECT id, name FROM entity_dict"):
             self._entity_cache[row[1]] = row[0]
+            self._entity_reverse[row[0]] = row[1]
         for row in self._conn.execute("SELECT id, name FROM predicate_dict"):
             self._predicate_cache[row[1]] = row[0]
+            self._predicate_reverse[row[0]] = row[1]
         for row in self._conn.execute("SELECT id, value, type FROM literal_table"):
             self._literal_cache[f"{row[1]}|{row[2]}"] = row[0]
+            self._literal_reverse[row[0]] = (row[1], row[2])
 
     def encode_entity(self, name: str) -> int:
         if name in self._entity_cache:
@@ -156,6 +185,7 @@ class DictionaryEncoder:
         cur = self._conn.execute("SELECT id FROM entity_dict WHERE name = ?", (name,))
         eid = cur.fetchone()[0]
         self._entity_cache[name] = eid
+        self._entity_reverse[eid] = name
         return eid
 
     def encode_predicate(self, name: str) -> int:
@@ -165,6 +195,7 @@ class DictionaryEncoder:
         cur = self._conn.execute("SELECT id FROM predicate_dict WHERE name = ?", (name,))
         pid = cur.fetchone()[0]
         self._predicate_cache[name] = pid
+        self._predicate_reverse[pid] = name
         return pid
 
     def encode_literal(self, value: str, typ: str = "string") -> int:
@@ -181,35 +212,39 @@ class DictionaryEncoder:
             )
             lid = cur.fetchone()[0]
         self._literal_cache[key] = lid
+        self._literal_reverse[lid] = (value, typ)
         return lid
 
     def decode_entity(self, eid: int) -> str | None:
-        for name, eid2 in self._entity_cache.items():
-            if eid2 == eid:
-                return name
+        cached = self._entity_reverse.get(eid)
+        if cached is not None:
+            return cached
         cur = self._conn.execute("SELECT name FROM entity_dict WHERE id = ?", (eid,))
         row = cur.fetchone()
         if row is not None:
             self._entity_cache[row[0]] = eid
+            self._entity_reverse[eid] = row[0]
         return row[0] if row else None
 
     def decode_predicate(self, pid: int) -> str | None:
-        for name, pid2 in self._predicate_cache.items():
-            if pid2 == pid:
-                return name
+        cached = self._predicate_reverse.get(pid)
+        if cached is not None:
+            return cached
         cur = self._conn.execute("SELECT name FROM predicate_dict WHERE id = ?", (pid,))
         row = cur.fetchone()
         if row is not None:
             self._predicate_cache[row[0]] = pid
+            self._predicate_reverse[pid] = row[0]
         return row[0] if row else None
 
     def decode_literal(self, lid: int) -> tuple[str, str] | None:
-        for key, lid2 in self._literal_cache.items():
-            if lid2 == lid:
-                parts = key.split("|", 1)
-                return (parts[0], parts[1]) if len(parts) == 2 else (parts[0], "string")
+        cached = self._literal_reverse.get(lid)
+        if cached is not None:
+            return cached
         cur = self._conn.execute("SELECT value, type FROM literal_table WHERE id = ?", (lid,))
         row = cur.fetchone()
+        if row is not None:
+            self._literal_reverse[lid] = (row[0], row[1])
         return row if row else None
 
     def entity_count(self) -> int:
@@ -255,6 +290,7 @@ class IndexManager:
             CREATE INDEX IF NOT EXISTS idx_pos ON triples(predicate_id, object_id, subject_id);
             CREATE INDEX IF NOT EXISTS idx_ops ON triples(object_id, predicate_id, subject_id);
             CREATE INDEX IF NOT EXISTS idx_event ON triples(event_id);
+            CREATE INDEX IF NOT EXISTS idx_context ON triples(context);
         """)
         if self._six_index:
             self._conn.executescript("""
@@ -560,12 +596,21 @@ class KnowledgeGraphEngine(DatabaseEngine):
                 event_ids.add(r[4])
 
         elif q.query_type == QueryType.CONTEXT:
+            # A context query at a broader (ancestor) context must also
+            # match facts stated in any of its sub-contexts, mirroring the
+            # ancestor open sets the sheaf engine maintains for the same
+            # reason. The `context` column stores the dot-separated path
+            # directly, so an exact match plus a prefix match covers it.
             ctx_str = q.context
-            lit_id = self._encoder.encode_literal(ctx_str)
-            pred_ctx = self._encoder.encode_predicate(SFDB_CONTEXT)
-            rows = self._indexes.scan_spo(s=None, p=pred_ctx, o=lit_id)
-            for r in rows:
-                event_ids.add(r[4])
+            if ctx_str == "world":
+                cur = self._conn.execute("SELECT DISTINCT event_id FROM triples")
+            else:
+                cur = self._conn.execute(
+                    "SELECT DISTINCT event_id FROM triples WHERE context = ? OR context LIKE ?",
+                    (ctx_str, ctx_str + ".%"),
+                )
+            for row in cur:
+                event_ids.add(row[0])
 
         elif q.query_type == QueryType.NEIGHBORHOOD and q.subject is not None:
             subj_eid = self._encoder.encode_entity(q.subject.value)
@@ -583,6 +628,32 @@ class KnowledgeGraphEngine(DatabaseEngine):
             cur = self._conn.execute("SELECT DISTINCT event_id FROM triples")
             for row in cur:
                 event_ids.add(row[0])
+
+        elif q.query_type == QueryType.TEMPORAL:
+            # Facts without a temporal envelope never match a temporal
+            # range query. Overlap test: [f_start, f_end) intersects
+            # [q_start, q_end) (an unset bound is treated as unbounded).
+            pred_start = self._encoder.encode_predicate(SFDB_TEMPORAL_START)
+            pred_end = self._encoder.encode_predicate(SFDB_TEMPORAL_END)
+            starts: dict[int, datetime] = {}
+            ends: dict[int, datetime] = {}
+            for r in self._indexes.scan_spo(s=None, p=pred_start, o=None):
+                lit = self._encoder.decode_literal(r[2])
+                if lit:
+                    starts[r[4]] = datetime.fromisoformat(lit[0])
+            for r in self._indexes.scan_spo(s=None, p=pred_end, o=None):
+                lit = self._encoder.decode_literal(r[2])
+                if lit:
+                    ends[r[4]] = datetime.fromisoformat(lit[0])
+
+            q_start, q_end = _temporal_query_bounds(q.temporal_start, q.temporal_end)
+            for eid, f_start in starts.items():
+                f_end = ends.get(eid)
+                if q_end is not None and f_start >= q_end:
+                    continue
+                if q_start is not None and f_end is not None and f_end <= q_start:
+                    continue
+                event_ids.add(eid)
 
         else:
             cur = self._conn.execute("SELECT DISTINCT event_id FROM triples LIMIT ?", (q.limit,))

@@ -1,4 +1,14 @@
-"""Contextual benchmark implementations — T3 through T10."""
+"""Contextual benchmark implementations — T3 through T10.
+
+NOT the paper's benchmark suite. For every workload defined here, the
+"_sheaf" function is a literal alias of the "_kg" function operating on a
+plain in-memory list of facts — neither touches a real KnowledgeGraphEngine
+or SheafDatabaseEngine, so no latency difference measured through this
+module reflects anything about the two engines. This module is not called
+by `sfdb benchmark` or by any script under scripts/. The paper's numbers
+come exclusively from sfdb.benchmark.paper_suite (see that module and
+paper/sections/evaluation.tex).
+"""
 
 from __future__ import annotations
 

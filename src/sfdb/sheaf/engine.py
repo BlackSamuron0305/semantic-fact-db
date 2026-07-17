@@ -167,6 +167,7 @@ class SheafDatabaseEngine(DatabaseEngine):
             optimizer=self._optimizer,
             cache=self._global_section_cache,
             restriction_graph=self._restriction_graph,
+            stalk_index=self._stalk_index,
         )
         self._initialized = True
 
@@ -361,16 +362,22 @@ class SheafDatabaseEngine(DatabaseEngine):
         assert self._planner is not None
         t0 = time.perf_counter_ns()
         try:
-            # Fast path: LOOKUP via NeighborhoodIndex (O(1) instead of full scan)
+            # Fast path: LOOKUP via NeighborhoodIndex (O(1) instead of full scan).
+            # NeighborhoodIndex keys facts by every entity they mention (subject
+            # *and* object references), so it only narrows the candidate set —
+            # LOOKUP itself means "subject == query.subject", so each candidate
+            # is still checked against the actual subject before being kept.
             if query.query_type == QueryType.LOOKUP and query.subject is not None:
                 fact_ids = self._neighborhood_index.get_fact_ids(query.subject.value)
                 facts: list[SemanticFact] = []
                 for fid in fact_ids:
                     stalk = self._stalk_index.get(fid)
-                    if stalk is not None:
-                        for section in stalk.sections.values():
+                    if stalk is None:
+                        continue
+                    for section in stalk.sections.values():
+                        if section.fact.subject.value == query.subject.value:
                             facts.append(section.fact)
-                            break
+                        break
                 facts = facts[:query.limit]
                 ns = time.perf_counter_ns() - t0
                 self._hooks.record_local_query(ns)

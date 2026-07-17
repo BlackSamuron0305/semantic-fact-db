@@ -114,13 +114,28 @@ class SheafOptimizer:
             for fid in self._context_index.get_fact_ids(query.context):
                 result.extend(self._openset_index.get_open_sets_for(fid))
         if query.query_type == QueryType.TEMPORAL and query.temporal_start:
-            year = query.temporal_start[:4]
-            for fid in self._temporal_index.get_fact_ids(year):
-                result.extend(self._openset_index.get_open_sets_for(fid))
+            for year in self._temporal_query_years(query):
+                for fid in self._temporal_index.get_fact_ids(year):
+                    result.extend(self._openset_index.get_open_sets_for(fid))
         if query.query_type == QueryType.PROVENANCE:
             for fid in self._provenance_index.get_by_source(query.context):
                 result.extend(self._openset_index.get_open_sets_for(fid))
         return list(set(result))
+
+    def _temporal_query_years(self, query: Query) -> list[str]:
+        """Every year bucket a temporal range query must consult.
+
+        If the range is bounded on both ends, only the years it spans
+        are needed. An open-ended range (no end bound) cannot rule out
+        any later year, so every year the index has ever seen is
+        consulted instead — still correct, just not narrowed.
+        """
+        assert query.temporal_start is not None
+        start_year = int(query.temporal_start[:4])
+        if query.temporal_end:
+            end_year = int(query.temporal_end[:4])
+            return [str(y) for y in range(start_year, end_year + 1)]
+        return self._temporal_index.years()
 
     def _classify_neighborhood(self, query: Query) -> list[str]:
         result: list[str] = []

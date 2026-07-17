@@ -5,9 +5,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 STEPS = [
     ("uv sync --group dev", "Install dependencies"),
-    ("uv run pytest --tb=short -q", "Run 321 tests"),
-    ("uv run sfdb benchmark --size small --workloads C1,C2,C5,C8,C9,C10", "Run benchmarks"),
-    ("uv run sfdb dashboard", "Generate dashboard"),
+    ("uv run pytest --tb=short -q", "Run 347 tests"),
+    ("uv run sfdb benchmark --size tiny --runs 3 --warm-up 1", "Run benchmark suite (quick smoke check)"),
     ("uv run sfdb verify", "Verify integrity"),
     ("uv run sfdb doctor", "System health"),
 ]

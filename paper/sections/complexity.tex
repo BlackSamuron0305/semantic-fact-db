@@ -45,20 +45,47 @@ amortized, $O(|\mathcal{C}|)$ worst case.
 
 \begin{table}[ht]
 \centering
-\caption{Query complexity comparison.}
+\caption{Query complexity comparison. $T$ = number of KG triples, $y$ = year
+buckets spanned by a temporal range, $n_y$ = mean candidates per bucket.
+See the paragraphs below for the reasoning behind each entry.}
 \label{tab:complexity:query}
 \begin{tabular}{@{}lcc@{}}
 \toprule
 Operation & Knowledge Graph & Sheaf Database \\
 \midrule
+Entity Lookup & $O(\log T + n)$ & $O(1 + n)$ \\
+Full Scan (GLOBAL) & $O(T)$ & $O(N)$ \\
 Context Lookup & $O(\log T + n)$ & $O(\log |\mathcal{C}| + n)$ \\
 Restriction & N/A (triple-oriented) & $O(k)$ \\
-Global Sections & N/A & $O(|\mathcal{C}| \cdot N^2)$ worst, $O(N \log |\mathcal{C}|)$ expected \\
+Global Sections (Gluing) & N/A & $O(|\mathcal{C}| \cdot N^2)$ worst \\
 Neighbourhood Search & $O(\log T + n)$ & $O(d + n)$ \\
-Temporal Search & $O(\log T + n)$ & $O(N)$ without index, $O(\log N + n)$ with index \\
+Temporal Range (bounded) & $O(T)$ & $O(y \cdot n_y)$ \\
+Temporal Range (unbounded) & $O(T)$ & $O(N)$ \\
 \bottomrule
 \end{tabular}
 \end{table}
+
+\paragraph{Entity Lookup.} KG locates every triple mentioning the entity through
+its POS index and reassembles each matching fact from its reified triples.
+SheafDB resolves the entity to a candidate fact-id set via the neighbourhood
+index in expected $O(1)$ per candidate, then returns a stalk-index lookup per
+candidate fact --- also $O(1)$ each, since every stalk holds exactly one
+section. Both engines are implemented as genuine hash-based lookups; the
+gap observed empirically (Section~\ref{sec:eval:query}) is a constant-factor
+one, set by SQLite round-trips and reified-triple reconstruction on the KG
+side rather than by asymptotic complexity.
+
+\paragraph{Full Scan (GLOBAL).} An unrestricted query that must return every
+fact. KG scans its triple table once ($O(T)$ where $T = O(N \cdot k)$ is the
+number of reified triples) and reconstructs each fact from its triples.
+SheafDB iterates the flat stalk index directly ($O(N)$), since every fact is
+registered in exactly one stalk regardless of how many topology open sets it
+also belongs to. An earlier iteration of this design answered GLOBAL queries
+by enumerating every open set a fact could appear in and de-duplicating,
+which cost $O(N \cdot \bar{o})$ where $\bar{o} \approx 8$--$10$ is the mean
+number of open sets per fact --- correct but strictly dominated by the flat
+index that was already being maintained for entity lookups. We describe this
+correction in Section~\ref{sec:discussion:interpretation}.
 
 \paragraph{Context Lookup.} KG requires an index scan; SheafDB performs a direct
 open set lookup with context-to-open-set index.
@@ -67,8 +94,12 @@ open set lookup with context-to-open-set index.
 filter object slots meaningful in $c$ ($O(k)$) and specialize values ($O(k)$).
 Total $O(k)$, independent of $N$.
 
-\paragraph{Global Sections (Gluing).} The algorithm processes the context poset
-bottom-up:
+\paragraph{Global Sections (Gluing).} This is a distinct operation from the
+GLOBAL query class benchmarked in Section~\ref{sec:evaluation}: it computes
+and verifies pairwise compatibility of sections across overlapping contexts
+(the $\textsc{Glue}()$ operation of Section~\ref{sec:problem:formal}), rather
+than simply returning every stored fact. The algorithm processes the context
+poset bottom-up:
 \begin{enumerate}
     \item Leaf collection: scan all facts at minimal contexts --- $O(N)$.
     \item Bottom-up gluing: for each non-leaf context $c$, check all
@@ -77,14 +108,29 @@ bottom-up:
     \item Expected case (tree-structured contexts, most sections compatible):
           $O(N \log |\mathcal{C}|)$.
 \end{enumerate}
+This operation is not exercised by the LOOKUP, GLOBAL, or TEMPORAL query
+classes reported in Section~\ref{sec:evaluation}, so its cost is not
+reflected in those measurements; it remains a genuine scalability concern
+for workloads that call $\textsc{Glue}()$ directly, and is unverified beyond
+the unit-test scale reported in Section~\ref{sec:correctness}.
 
 \paragraph{Neighbourhood Search.} Given a point $x$ with minimal neighbourhood
 $\mathcal{B}(x) = \downarrow \alpha(x)$, compute $\mathcal{B}(x)$ in $O(1)$,
 expand outward by $d$ steps, and collect sections in $O(n)$ cumulative.
 Total: $O(d + n)$.
 
-\paragraph{Temporal Search.} Without a temporal index, full scan costs $O(N)$.
-With an interval-tree index: $O(\log N + n)$.
+\paragraph{Temporal Search.} A range query bounded on both ends narrows to the
+$y$ year buckets it spans via the temporal index, each holding $n_y$
+candidate facts on average, then filters each candidate against the exact
+interval in $O(1)$: $O(y \cdot n_y)$ total, which is sub-linear in $N$ for a
+narrow range. An open-ended range (no upper bound) cannot be narrowed this
+way and falls back to consulting every year bucket the index has ever
+created, degrading to $O(N)$ --- empirically a $\sim 40\times$ slowdown
+relative to the bounded case at $N=10^4$
+(Section~\ref{sec:discussion:temporal-unbounded}). KG has no temporal index;
+it always scans the triple table and filters reconstructed facts against
+the query range in Python, $O(T)$ regardless of whether the range is
+bounded.
 
 \subsection{Space Complexity}
 \label{sec:complexity:space}
@@ -114,14 +160,29 @@ $O(N + |\mathcal{C}|)$ for the context hash.
 \subsection{Empirical Hypotheses}
 \label{sec:complexity:hypotheses}
 
-These bounds are tested empirically by the benchmark framework:
+These bounds are tested empirically by the benchmark framework
+(Section~\ref{sec:evaluation}):
 
 \begin{enumerate}
-    \item SheafDB insertion is $O(d)$ vs.\ KG's $O(k \log T)$ for contexts
-          of depth $d$.
-    \item SheafDB contextual queries are faster than KG pattern queries for
-          highly nested contexts.
-    \item KG joins outperform SheafDB gluing for non-contextual queries.
-    \item The expected-case $O(N \log |\mathcal{C}|)$ gluing complexity holds
-          for tree-structured context hierarchies.
+    \item SheafDB insertion is typically $O(d)$ vs.\ KG's $O(k \log T)$ for contexts
+          of depth $d$; empirically SFDB matches or slightly beats KG insert
+          latency at every scale up to $10^4$ facts.
+    \item SheafDB LOOKUP queries are faster than KG's reified-triple
+          reconstruction at every scale measured ($20$--$25\times$ at $10^4$
+          facts), consistent with both being $O(1)$-per-candidate lookups
+          with a KG-side constant-factor penalty from SQLite round trips.
+    \item SheafDB GLOBAL queries are faster than KG's triple-table scan at
+          every scale measured ($50$--$100\times$ at $10^4$ facts), once the
+          query path uses the flat stalk index rather than open-set
+          enumeration; this reverses what an earlier, buggy implementation
+          measured, as discussed in Section~\ref{sec:discussion:interpretation}.
+    \item SheafDB's temporal index gives a modest speedup ($1.2$--$1.6\times$)
+          on bounded ranges but degrades below KG's flat scan-and-filter on
+          unbounded ranges, exactly as the $O(y \cdot n_y)$ vs.\ $O(N)$
+          bounds above predict.
+    \item The expected-case $O(N \log |\mathcal{C}|)$ gluing complexity for
+          the $\textsc{Glue}()$ operation (distinct from a GLOBAL query) is
+          conjectured for tree-structured context hierarchies and is
+          checked only at unit-test scale; it is not benchmarked at
+          $10^4$ facts in this paper.
 \end{enumerate}

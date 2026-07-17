@@ -19,35 +19,42 @@ class VerificationResult:
 
 
 def verify_equivalence(results: dict[str, list[dict[str, Any]]]) -> VerificationResult:
+    """Check that every engine's result set is equal as a *set* of rows.
+
+    Rows are compared order-independently and without lossy stringification:
+    a set of frozen (type-preserving) rows, not a positional zip of
+    str()-cast tuples, so re-ordered-but-identical results correctly pass
+    and type differences (e.g. 1 vs "1") correctly fail.
+    """
     if len(results) < 2:
         return VerificationResult(True, "Single engine — no comparison needed")
 
     engine_names = list(results.keys())
     baseline_name = engine_names[0]
-    baseline = _normalize_rows(results[baseline_name])
+    baseline = _freeze_rows(results[baseline_name])
 
     for name in engine_names[1:]:
-        other = _normalize_rows(results[name])
+        other = _freeze_rows(results[name])
 
-        if len(baseline) != len(other):
+        if baseline != other:
+            only_baseline = len(baseline - other)
+            only_other = len(other - baseline)
             return VerificationResult(
-                False, f"Row count mismatch: {baseline_name}={len(baseline)}, {name}={len(other)}"
+                False,
+                f"{baseline_name} vs {name} differ: "
+                f"{only_baseline} rows only in {baseline_name}, {only_other} only in {name}",
             )
-
-        for i, (br, or_) in enumerate(zip(baseline, other, strict=False)):
-            if br != or_:
-                return VerificationResult(
-                    False, f"Row {i} differs: {baseline_name}={br}, {name}={or_}"
-                )
 
     return VerificationResult(True, f"All {len(results)} engines produce identical results")
 
 
-def _normalize_rows(rows: list[dict[str, Any]]) -> list[tuple[str, ...]]:
-    if not rows:
-        return []
-    result: list[tuple[str, ...]] = []
-    for r in rows:
-        items = tuple(str(v) for v in r.values())
-        result.append(items)
-    return result
+def _freeze_rows(rows: list[dict[str, Any]]) -> frozenset[Any]:
+    return frozenset(_freeze(r) for r in rows)
+
+
+def _freeze(value: Any) -> Any:
+    if isinstance(value, dict):
+        return frozenset((k, _freeze(v)) for k, v in value.items())
+    if isinstance(value, (list, tuple)):
+        return tuple(_freeze(v) for v in value)
+    return value

@@ -80,6 +80,27 @@ number for a query whose two engines produced differing canonical result
 sets. Every benchmark row reported in Section~\ref{sec:evaluation} has passed
 this check.
 
+\paragraph{The check caught a real bug.} An earlier version of the
+verification harness compared results positionally after casting every
+field to a string, which masks two classes of real divergence: a
+re-ordering of an otherwise identical result set, and a type difference
+(e.g.\ the integer $35$ reconstructed as the float $35.0$ by the KG
+engine's dictionary-encoded storage, which is a benign representational
+difference that the canonical form is supposed to absorb, not a
+divergence). Replacing the check with an order-independent comparison over
+type-preserving canonical rows (Definition~\ref{def:semanticequiv}) surfaced
+a genuine equivalence failure that the earlier, weaker check had not
+caught: the sheaf engine's LOOKUP fast path resolved an entity-anchored
+query through the same index used to answer entity-\emph{neighbourhood}
+queries (any fact mentioning the entity as subject \emph{or} as an object
+reference), rather than filtering to subject matches, so it silently
+returned a superset of the correct LOOKUP result. This is exactly the kind
+of divergence Theorem~\ref{thm:equivalence} is meant to make impossible to
+miss, and it was caught before publication rather than after. We record it
+here, alongside the fix, as direct evidence that the verification
+methodology does the job the paper claims for it, rather than reporting
+only the numbers that resulted from having fixed it.
+
 \subsection{Referential and Consistency Invariants}
 \label{sec:correctness:integrity}
 
