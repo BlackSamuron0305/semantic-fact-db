@@ -1,5 +1,13 @@
 # Final Scientific Audit
 
+> **Snapshot notice (added 2026-07-17):** this audit predates the paper's later
+> honesty/rigor pass (commit `456514c` and after) and the team's own
+> `reviewer_simulation.md`/`risk_register.md`. It checks implementation against
+> the paper's own stated theorems, but doesn't flag the issues those later docs
+> raise (e.g. several "theorems" restate definitions; the missing real-RDF-store
+> baseline). Treat this as a point-in-time internal check, not the current
+> assessment — see `PLAN.md` for the current roadmap.
+
 ## Verification Checklist
 
 ### Mathematics ↔ Implementation

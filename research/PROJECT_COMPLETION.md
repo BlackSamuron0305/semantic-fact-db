@@ -1,5 +1,13 @@
 # Semantic Fact Database (SFDB) — Project Completion Report
 
+> **Snapshot notice (added 2026-07-17):** this report predates the paper's
+> later honesty/rigor pass (commit `456514c` and after). Framing here — e.g.
+> "SheafDB outperforms KG on contextual queries" — is more unqualified than the
+> current paper text, which reports a hedged LOOKUP-vs-GLOBAL tradeoff (fast on
+> LOOKUP, up to 1405× slower on unrestricted GLOBAL scans at 10⁴ facts). Treat
+> this as a historical snapshot of project status, not the current position —
+> see `PLAN.md` for the current roadmap and `paper/sections/` for current claims.
+
 ## Overview
 
 SFDB investigates whether **sheaf theory** provides a more efficient representation for semantic facts than traditional RDF-style knowledge graphs. The project implements both a baseline Knowledge Graph engine and an experimental Sheaf Database engine, benchmarks them against 10 contextual workloads, and produces a paper documenting the results.

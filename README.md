@@ -14,7 +14,7 @@ computational cost compared to RDF-style triple stores?
 # Install dependencies
 uv sync --group dev
 
-# Run tests (321 tests)
+# Run tests (347 tests)
 uv run pytest
 
 # Type check
@@ -67,7 +67,7 @@ semantic-fact-db/
 │       ├── datasets/     # Dataset generators
 │       ├── visualization/ # Publication-quality plots
 │       └── cli.py        # Command-line interface
-├── tests/                # 321 unit tests
+├── tests/                # 347 unit tests
 ├── paper/                # LaTeX paper (50+ sections)
 ├── research/             # Future models survey, audit, scorecard
 │   └── future_models/    # 25 model analyses

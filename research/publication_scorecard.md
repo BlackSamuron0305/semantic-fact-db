@@ -4,6 +4,14 @@
 **Date:** 2026-07-08
 **Reviewer Role:** Independent validation laboratory
 
+> **Snapshot notice (added 2026-07-17):** this scorecard predates the paper's
+> later honesty/rigor pass (commit `456514c` and after) and the team's own
+> `reviewer_simulation.md`/`risk_register.md`, which are considerably more
+> critical (e.g. flagging the missing real-RDF-store baseline as the top
+> disqualifying gap — not scored here). Treat the numeric scores below as a
+> historical self-assessment, not the current state. See `PLAN.md` for the
+> current roadmap.
+
 ---
 
 ## Scoring Rubric
