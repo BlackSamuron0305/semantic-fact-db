@@ -67,24 +67,29 @@ The contributions of this paper are, in order:
           bidirectional mapping to and from each engine's native format,
           used to establish semantic equivalence at every insert and every
           query (Section~\ref{sec:correctness}). Cross-engine equivalence is
-          enforced by the test suite ($347$ passing tests) and re-checked
+          enforced by the test suite ($358$ passing tests) and re-checked
           on every benchmark run.
 
-    \item A benchmark evaluation across three query classes (LOOKUP,
-          GLOBAL, TEMPORAL) and insert throughput, at three scales
-          (Section~\ref{sec:evaluation}), with every query at every scale
-          checked for cross-engine result equivalence as part of the same
-          run. The sheaf-inspired engine is $21$--$32\times$ faster than the
-          KG baseline on LOOKUP queries, $44$--$95\times$ faster on GLOBAL
-          scans, $1.2$--$1.6\times$ faster on bounded temporal-interval
-          queries, and matches it on inserts ($0.74$--$0.99\times$). The
-          tradeoff we report is not latency but memory: SFDB's in-memory
-          indexing structures use $1.3$--$4.8\times$ more resident memory per
-          fact than the KG baseline's reified-triple storage. We also report
-          that tightening the cross-engine verification harness during this
-          evaluation caught a real semantic bug in the sheaf engine's LOOKUP
-          path (Section~\ref{sec:correctness}), which we take as evidence
-          for the verification methodology, not just for the numbers.
+    \item A benchmark evaluation across four query classes (LOOKUP,
+          GLOBAL, bounded TEMPORAL, and unbounded TEMPORAL) and insert
+          throughput, at three scales (Section~\ref{sec:evaluation}), with
+          every query at every scale checked for cross-engine result
+          equivalence as part of the same run. The sheaf-inspired engine is
+          $22$--$41\times$ faster than the KG baseline on LOOKUP queries,
+          $39$--$95\times$ faster on GLOBAL scans, $1.4$--$1.7\times$ faster
+          on bounded temporal-interval queries, and $1.1$--$1.4\times$
+          faster on unbounded temporal-interval queries once resolved
+          against a second, flat, binary-searchable temporal index built
+          specifically for that case. Insert throughput is close to parity
+          ($1.12\times$ slower at $100$ facts, $1.31$--$1.37\times$ faster
+          at $1\,000$ and $10\,000$). The tradeoff we report is not latency
+          but memory: SFDB's in-memory indexing structures use
+          $1.2$--$3.4\times$ more resident memory per fact than the KG
+          baseline's reified-triple storage. We also report that tightening
+          the cross-engine verification harness during this evaluation
+          caught a real semantic bug in the sheaf engine's LOOKUP path
+          (Section~\ref{sec:correctness}), which we take as evidence for the
+          verification methodology, not just for the numbers.
 
     \item A discussion of the design's realistic scope, including the
           honest observation that the sheaf condition is vacuous in our

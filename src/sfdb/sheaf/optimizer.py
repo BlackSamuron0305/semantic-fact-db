@@ -18,6 +18,7 @@ from sfdb.sheaf.indexes import (
     OpenSetIndex,
     ProvenanceIndex,
     TemporalIndex,
+    parse_temporal_bound,
 )
 from sfdb.sheaf.restriction import RestrictionGraph
 
@@ -113,29 +114,36 @@ class SheafOptimizer:
         if query.query_type == QueryType.CONTEXT and query.context:
             for fid in self._context_index.get_fact_ids(query.context):
                 result.extend(self._openset_index.get_open_sets_for(fid))
-        if query.query_type == QueryType.TEMPORAL and query.temporal_start:
-            for year in self._temporal_query_years(query):
-                for fid in self._temporal_index.get_fact_ids(year):
-                    result.extend(self._openset_index.get_open_sets_for(fid))
+        if query.query_type == QueryType.TEMPORAL and (query.temporal_start or query.temporal_end):
+            for fid in self._temporal_candidate_fact_ids(query):
+                result.extend(self._openset_index.get_open_sets_for(fid))
         if query.query_type == QueryType.PROVENANCE:
             for fid in self._provenance_index.get_by_source(query.context):
                 result.extend(self._openset_index.get_open_sets_for(fid))
         return list(set(result))
 
-    def _temporal_query_years(self, query: Query) -> list[str]:
-        """Every year bucket a temporal range query must consult.
+    def _temporal_candidate_fact_ids(self, query: Query) -> set[str]:
+        """Fact ids that could possibly satisfy a TEMPORAL query's range.
 
-        If the range is bounded on both ends, only the years it spans
-        are needed. An open-ended range (no end bound) cannot rule out
-        any later year, so every year the index has ever seen is
-        consulted instead — still correct, just not narrowed.
+        A range bounded on both ends is narrowed to the year buckets it
+        spans -- cheap, and already exact enough to be a tight candidate
+        set. A range open on one end cannot be narrowed by year bucket (no
+        later, or no earlier, year can be ruled out), so it is resolved
+        directly against the flat, binary-searchable start/end arrays
+        instead of falling back to every bucket the index has ever
+        created.
         """
-        assert query.temporal_start is not None
-        start_year = int(query.temporal_start[:4])
-        if query.temporal_end:
+        if query.temporal_start and query.temporal_end:
+            start_year = int(query.temporal_start[:4])
             end_year = int(query.temporal_end[:4])
-            return [str(y) for y in range(start_year, end_year + 1)]
-        return self._temporal_index.years()
+            ids: set[str] = set()
+            for year in range(start_year, end_year + 1):
+                ids.update(self._temporal_index.get_fact_ids(str(year)))
+            return ids
+        if query.temporal_start:
+            return set(self._temporal_index.facts_ending_after(parse_temporal_bound(query.temporal_start)))
+        assert query.temporal_end is not None
+        return set(self._temporal_index.facts_starting_before(parse_temporal_bound(query.temporal_end)))
 
     def _classify_neighborhood(self, query: Query) -> list[str]:
         result: list[str] = []

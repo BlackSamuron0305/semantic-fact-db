@@ -17,10 +17,20 @@ Indexes:
 
 from __future__ import annotations
 
+import bisect
 from collections import defaultdict
+from datetime import UTC, datetime
 
 from common.schema import SemanticFact
 from sfdb.sheaf.presheaf import GlobalSection, LocalSection, Stalk
+
+
+def parse_temporal_bound(token: str) -> datetime:
+    """Parse a query-side temporal bound: either a bare year ("2024") or a
+    full ISO datetime string."""
+    if len(token) == 4 and token.isdigit():
+        return datetime(int(token), 1, 1, tzinfo=UTC)
+    return datetime.fromisoformat(token)
 
 
 class OpenSetIndex:
@@ -192,18 +202,32 @@ class NeighborhoodIndex:
 class TemporalIndex:
     """Maps temporal intervals to fact IDs.
 
-    Supports year-based and range-based temporal queries.
+    Supports year-based bucket lookups (used for ranges bounded on both
+    ends, where narrowing to the years spanned is already close to exact)
+    and flat, binary-searchable start/end arrays (used for ranges open on
+    one end, where no bounded set of year buckets exists to narrow to).
     """
 
     def __init__(self) -> None:
         self._year_to_facts: dict[str, set[str]] = defaultdict(set)
+        self._by_start: list[tuple[datetime, str]] = []
+        self._by_end: list[tuple[datetime, str]] = []
+        self._open_ended: set[str] = set()
+        self._sorted = True
 
     def add(self, year: str, fact_id: str) -> None:
         self._year_to_facts[year].add(fact_id)
 
     def index_fact(self, fact: SemanticFact) -> None:
         if fact.temporal is not None and fact.temporal.start is not None:
-            self._year_to_facts[str(fact.temporal.start.year)].add(fact.id.value)
+            start = fact.temporal.start
+            self._year_to_facts[str(start.year)].add(fact.id.value)
+            self._by_start.append((start, fact.id.value))
+            if fact.temporal.end is not None:
+                self._by_end.append((fact.temporal.end, fact.id.value))
+            else:
+                self._open_ended.add(fact.id.value)
+            self._sorted = False
         else:
             self._year_to_facts["atemporal"].add(fact.id.value)
 
@@ -212,6 +236,37 @@ class TemporalIndex:
 
     def years(self) -> list[str]:
         return list(self._year_to_facts.keys())
+
+    def _ensure_sorted(self) -> None:
+        if not self._sorted:
+            self._by_start.sort(key=lambda t: t[0])
+            self._by_end.sort(key=lambda t: t[0])
+            self._sorted = True
+
+    def facts_ending_after(self, bound: datetime) -> frozenset[str]:
+        """Fact ids whose temporal interval overlaps [bound, +inf).
+
+        Binary-searches the flat, sorted-by-end array for the first entry
+        with ``end > bound`` and returns everything from there on, plus
+        every fact with no end (still valid, so always overlaps an
+        open-ended range). This is the candidate set for a TEMPORAL query
+        with a start bound and no end bound, and is O(log n + k) rather
+        than the O(years) cost of consulting every year bucket the index
+        has ever created.
+        """
+        self._ensure_sorted()
+        idx = bisect.bisect_right(self._by_end, bound, key=lambda t: t[0])
+        return frozenset(fid for _, fid in self._by_end[idx:]) | self._open_ended
+
+    def facts_starting_before(self, bound: datetime) -> frozenset[str]:
+        """Fact ids whose temporal interval overlaps (-inf, bound).
+
+        Symmetric counterpart of :meth:`facts_ending_after`, for a
+        TEMPORAL query with an end bound and no start bound.
+        """
+        self._ensure_sorted()
+        idx = bisect.bisect_left(self._by_start, bound, key=lambda t: t[0])
+        return frozenset(fid for _, fid in self._by_start[:idx])
 
     def count(self) -> int:
         return sum(len(ids) for ids in self._year_to_facts.values())

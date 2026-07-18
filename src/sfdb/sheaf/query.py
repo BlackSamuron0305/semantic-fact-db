@@ -23,18 +23,12 @@ from common.interfaces import (
 )
 from common.schema import SemanticFact
 from common.types import Context
-from sfdb.sheaf.indexes import GlobalSectionCache, StalkIndex
+from sfdb.sheaf.indexes import GlobalSectionCache, StalkIndex, parse_temporal_bound
 from sfdb.sheaf.optimizer import QueryClassification, SheafOptimizer
 from sfdb.sheaf.presheaf import GlobalSection, LocalSection, Presheaf
 from sfdb.sheaf.restriction import RestrictionGraph
 
-
-def _parse_temporal_token(token: str) -> datetime:
-    """Parse a temporal query bound: either a bare year ("2024") or a
-    full ISO datetime string."""
-    if len(token) == 4 and token.isdigit():
-        return datetime(int(token), 1, 1, tzinfo=UTC)
-    return datetime.fromisoformat(token)
+_parse_temporal_token = parse_temporal_bound
 
 
 def _temporal_query_bounds(

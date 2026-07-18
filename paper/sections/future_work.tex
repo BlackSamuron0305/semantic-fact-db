@@ -3,23 +3,32 @@
 
 Several concrete extensions would improve either the design or the
 credibility of the evaluation. We list them in the order we consider
-useful.
+useful; the first is no longer future work, and we keep the section to
+record what it was and what came of it.
 
-\subsection{A Flat Temporal Index for Unbounded Ranges}
+\subsection{A Flat Temporal Index for Unbounded Ranges --- Implemented}
 \label{sec:future:global-index}
 
-The GLOBAL-query fix (Section~\ref{sec:discussion:interpretation}) is
-already implemented and reflected in Section~\ref{sec:evaluation}; the
-same class of gap remains for TEMPORAL queries with an open-ended range
-(Section~\ref{sec:discussion:temporal-unbounded}): the year-bucketed
-temporal index has no bounded candidate set to fall back on, so it
-degrades toward consulting every bucket. A flat, sorted temporal
-index (an interval tree, or a sorted array of (start, end) pairs searched
-by binary search) alongside the bucketed one would let an unbounded query
-binary-search to its starting point and scan forward, rather than
-consulting every year bucket the index has ever created. This is the
-single change most likely to remove the paper's remaining query-latency
-negative result, and it would be our first extension.
+The GLOBAL-query fix (Section~\ref{sec:discussion:interpretation}) was
+already implemented as of the previous revision of this paper; the same
+class of gap remained, at that time, for TEMPORAL queries with an
+open-ended range (Section~\ref{sec:discussion:temporal-unbounded}): the
+year-bucketed temporal index had no bounded candidate set to fall back on,
+so it degraded toward consulting every bucket. This section originally
+proposed a flat, sorted temporal index (an interval tree, or a sorted
+array of (start, end) pairs searched by binary search) alongside the
+bucketed one, so that an unbounded query could binary-search to its
+starting point and scan forward instead. We have since implemented exactly
+that (\texttt{sfdb.sheaf.indexes.TemporalIndex.facts\_ending\_after} and
+its symmetric counterpart \texttt{facts\_starting\_before}); the
+benchmarked result is a $1.1$--$1.4\times$ SFDB speedup on unbounded
+TEMPORAL queries rather than the $\sim 40\times$ slowdown reported
+previously, described in full in
+Section~\ref{sec:discussion:temporal-unbounded}. We record the original
+proposal here rather than deleting it, since the fact that it turned out
+to be a small, well-scoped change rather than a genuine architectural
+limitation is itself part of the paper's evidence about how easy this
+class of gap is to mistake for a design ceiling.
 
 \subsection{Real-World Datasets and Standard Benchmarks}
 \label{sec:future:real-data}
@@ -72,11 +81,23 @@ Realising this would directly reduce the memory overhead identified in
 Section~\ref{sec:eval:memory}, which is currently the paper's primary
 reported cost.
 
-\subsection{Hybrid Storage}
+\subsection{Hybrid Storage --- Revisited}
 \label{sec:future:hybrid}
 
-A hybrid system that stores facts under both representations and lets the
-optimiser choose the access path at query time would combine SFDB's LOOKUP
-advantage with the KG baseline's GLOBAL advantage at the cost of double
-storage. In workloads where storage is cheap relative to query latency,
-this is the natural production design.
+An earlier version of this section proposed a hybrid system that would
+store facts under both representations and let the optimiser choose the
+access path per query, on the premise that this would combine SFDB's
+LOOKUP advantage with a GLOBAL advantage that belonged to the KG baseline.
+That premise no longer holds: Section~\ref{sec:evaluation} reports SFDB
+faster than the KG baseline on GLOBAL as well as LOOKUP, and
+Section~\ref{sec:discussion:temporal-unbounded} closes the one query shape
+(unbounded TEMPORAL) where the KG baseline had been competitive. With no
+latency-motivated reason left to maintain two copies of the data, full
+dual-representation storage is not the extension we would prioritise: it
+would double the memory cost identified in Section~\ref{sec:eval:memory}
+--- the paper's one remaining tradeoff --- to hedge against a latency gap
+that the last two fixes in this evaluation have, between them, closed for
+every class we measure. A narrower version of the idea could still be
+worth revisiting if a workload surfaces a genuine KG-favoured access
+pattern this evaluation does not cover, but we would want that pattern
+identified first rather than storing everything twice speculatively.

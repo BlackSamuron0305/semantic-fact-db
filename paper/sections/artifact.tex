@@ -37,7 +37,7 @@ To reproduce the reported numbers from a clean clone:
 git clone https://github.com/BlackSamuron0305/semantic-fact-db
 cd semantic-fact-db
 uv sync --group dev
-uv run pytest                          # 347 tests should pass
+uv run pytest                          # 358 tests should pass
 uv run sfdb benchmark                  # all 3 scales, populates results/
 uv run python scripts/generate_tables.py  # regenerates paper/tables/*.tex
 uv run python scripts/generate_paper.py

@@ -232,6 +232,43 @@ class TestTemporal:
         assert _query_results_equal(kg_r, sheaf_r)
         assert len(kg_r.facts) >= 1
 
+    def test_temporal_unbounded_range(
+        self, kg_engine: KnowledgeGraphEngine, sheaf_engine: SheafDatabaseEngine
+    ) -> None:
+        """An open-ended range (start bound, no end) must resolve correctly
+        via the flat temporal index rather than the year-bucket fallback,
+        and must still agree exactly with the KG baseline."""
+        facts = [
+            # Ended well before the query window — must be excluded.
+            _fact(
+                "closed_before",
+                "e1",
+                "event",
+                temporal=TemporalInfo(start=datetime(2015, 1, 1, tzinfo=UTC), end=datetime(2016, 1, 1, tzinfo=UTC)),
+            ),
+            # Ends inside the open-ended query window — must match.
+            _fact(
+                "closed_after",
+                "e2",
+                "event",
+                temporal=TemporalInfo(start=datetime(2019, 1, 1, tzinfo=UTC), end=datetime(2030, 1, 1, tzinfo=UTC)),
+            ),
+            # Still ongoing (no end) — must always match an open-ended range.
+            _fact("open_ended", "e3", "event", temporal=TemporalInfo(start=datetime(2018, 1, 1, tzinfo=UTC))),
+            # No temporal envelope at all — must never match.
+            _fact("atemporal", "e4", "event"),
+        ]
+        for f in facts:
+            kg_engine.insert(f)
+            sheaf_engine.insert(f)
+
+        q = Query(query_type=QueryType.TEMPORAL, temporal_start="2024", limit=10)
+        kg_r = kg_engine.query(q)
+        sheaf_r = sheaf_engine.query(q)
+        assert _query_results_equal(kg_r, sheaf_r)
+        matched_ids = {f.id.value for f in sheaf_r.facts}
+        assert matched_ids == {"closed_after", "open_ended"}
+
 
 # ---------------------------------------------------------------------------
 # 4. Provenance Queries

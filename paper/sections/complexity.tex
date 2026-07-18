@@ -11,7 +11,8 @@ $|\mathcal{C}|$ = number of contexts,
 $d$ = context depth in the poset,
 $T$ = number of KG triples,
 $R$ = number of restriction maps,
-$n$ = result size.
+$n$ = result size,
+$M$ = number of temporally-annotated facts ($M \leq N$).
 
 \subsection{Fact Construction and Modification}
 \label{sec:complexity:modification}
@@ -60,7 +61,7 @@ Restriction & N/A (triple-oriented) & $O(k)$ \\
 Global Sections (Gluing) & N/A & $O(|\mathcal{C}| \cdot N^2)$ worst \\
 Neighbourhood Search & $O(\log T + n)$ & $O(d + n)$ \\
 Temporal Range (bounded) & $O(T)$ & $O(y \cdot n_y)$ \\
-Temporal Range (unbounded) & $O(T)$ & $O(N)$ \\
+Temporal Range (unbounded) & $O(T)$ & $O(\log M + n)$ \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -120,17 +121,27 @@ expand outward by $d$ steps, and collect sections in $O(n)$ cumulative.
 Total: $O(d + n)$.
 
 \paragraph{Temporal Search.} A range query bounded on both ends narrows to the
-$y$ year buckets it spans via the temporal index, each holding $n_y$
-candidate facts on average, then filters each candidate against the exact
-interval in $O(1)$: $O(y \cdot n_y)$ total, which is sub-linear in $N$ for a
-narrow range. An open-ended range (no upper bound) cannot be narrowed this
-way and falls back to consulting every year bucket the index has ever
-created, degrading to $O(N)$ --- empirically a $\sim 40\times$ slowdown
-relative to the bounded case at $N=10^4$
-(Section~\ref{sec:discussion:temporal-unbounded}). KG has no temporal index;
-it always scans the triple table and filters reconstructed facts against
-the query range in Python, $O(T)$ regardless of whether the range is
-bounded.
+$y$ year buckets it spans via the year-bucketed temporal index, each holding
+$n_y$ candidate facts on average, then filters each candidate against the
+exact interval in $O(1)$: $O(y \cdot n_y)$ total, which is sub-linear in $N$
+for a narrow range. An open-ended range (no upper bound) cannot be narrowed
+by year bucket, since no later year can be ruled out; the year-bucketed
+index alone would have to fall back to consulting every bucket it has ever
+created, degrading to $O(N)$. Rather than accept that fallback, SFDB
+maintains a second, flat structure alongside the bucketed index: fact ids
+sorted by temporal end timestamp (plus a set of facts with no end, which
+always overlap an open-ended range). An unbounded query binary-searches
+this sorted array for its starting point and takes the remainder --
+$O(\log M + n)$, where $M \leq N$ is the number of temporally-annotated
+facts and $n$ is the candidate set returned. This is what closes the gap
+described in Section~\ref{sec:discussion:temporal-unbounded}: an earlier
+version of the system had only the year-bucketed index and measured a
+$\sim 40\times$ slowdown on unbounded ranges relative to the bounded case
+at $N=10^4$; with the flat index added, unbounded TEMPORAL queries are
+faster than the KG baseline at every scale measured. KG has no temporal
+index at all; it always scans the triple table and filters reconstructed
+facts against the query range in Python, $O(T)$ regardless of whether the
+range is bounded.
 
 \subsection{Space Complexity}
 \label{sec:complexity:space}
@@ -165,23 +176,27 @@ These bounds are tested empirically by the benchmark framework
 
 \begin{enumerate}
     \item SFDB insertion is typically $O(d)$ vs.\ KG's $O(k \log T)$ for contexts
-          of depth $d$; empirically SFDB matches or slightly beats KG insert
-          latency at every scale up to $10^4$ facts (up to $1.35\times$
-          faster, narrowing to near-parity at $100$ facts).
+          of depth $d$; empirically SFDB is $1.12\times$ slower than KG at
+          $100$ facts (small absolute latencies, plausibly noise-dominated)
+          and $1.31$--$1.37\times$ faster at $1\,000$ and $10\,000$ facts.
     \item SFDB LOOKUP queries are faster than KG's reified-triple
-          reconstruction at every scale measured ($21$--$32\times$ across
+          reconstruction at every scale measured ($22$--$41\times$ across
           $10^2$--$10^4$ facts), consistent with both being $O(1)$-per-candidate
           lookups with a KG-side constant-factor penalty from SQLite round trips.
     \item SFDB GLOBAL queries are faster than KG's triple-table scan at
-          every scale measured ($44$--$95\times$ across $10^2$--$10^4$
+          every scale measured ($39$--$95\times$ across $10^2$--$10^4$
           facts), once the query path uses the flat stalk index rather
           than open-set enumeration; this reverses what an earlier, buggy
           implementation measured, as discussed in
           Section~\ref{sec:discussion:interpretation}.
-    \item SFDB's temporal index gives a modest speedup ($1.2$--$1.6\times$)
-          on bounded ranges but degrades below KG's flat scan-and-filter on
-          unbounded ranges, exactly as the $O(y \cdot n_y)$ vs.\ $O(N)$
-          bounds above predict.
+    \item SFDB's temporal indexing is faster than KG's flat scan-and-filter
+          on both bounded ranges ($1.4$--$1.7\times$, via the year-bucketed
+          index) and unbounded ranges ($1.1$--$1.4\times$, via the flat
+          binary-searchable index added specifically for this case), as the
+          $O(y \cdot n_y)$ and $O(\log M + n)$ bounds above predict; this
+          also reverses what an earlier implementation measured on
+          unbounded ranges, as discussed in
+          Section~\ref{sec:discussion:temporal-unbounded}.
     \item The expected-case $O(N \log |\mathcal{C}|)$ gluing complexity for
           the $\textsc{Glue}()$ operation (distinct from a GLOBAL query) is
           conjectured for tree-structured context hierarchies and is

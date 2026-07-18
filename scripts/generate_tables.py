@@ -66,10 +66,19 @@ Facts & KG (ms) & SFDB (ms) & Ratio \\\\
 """
 
 
+QUERY_CLASS_LABELS = {
+    "LOOKUP": "LOOKUP",
+    "GLOBAL": "GLOBAL",
+    "TEMPORAL": "TEMPORAL (bounded)",
+    "TEMPORAL_UNBOUNDED": "TEMPORAL (unbounded)",
+}
+
+
 def generate_query_table(summary: dict) -> str:
     rows = []
-    classes = ("LOOKUP", "GLOBAL", "TEMPORAL")
+    classes = ("LOOKUP", "GLOBAL", "TEMPORAL", "TEMPORAL_UNBOUNDED")
     for qclass in classes:
+        label = QUERY_CLASS_LABELS[qclass]
         for n_str in sorted(summary["query"], key=int):
             n = int(n_str)
             entry = summary["query"][n_str].get(qclass)
@@ -78,7 +87,7 @@ def generate_query_table(summary: dict) -> str:
             kg_mean = entry["stats"].get("KnowledgeGraph", {}).get("mean", 0.0)
             sh_mean = entry["stats"].get("SheafDatabase", {}).get("mean", 0.0)
             rows.append(
-                f"{qclass} & ${n:,}$ & ${_fmt(kg_mean)}$ & ${_fmt(sh_mean)}$ & ${_ratio(kg_mean, sh_mean)}$ \\\\"
+                f"{label} & ${n:,}$ & ${_fmt(kg_mean)}$ & ${_fmt(sh_mean)}$ & ${_ratio(kg_mean, sh_mean)}$ \\\\"
             )
         rows.append("\\midrule")
     if rows and rows[-1] == "\\midrule":

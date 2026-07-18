@@ -32,7 +32,7 @@ log = logging.getLogger(__name__)
 PAPER_SCALES: tuple[int, ...] = (100, 1_000, 10_000)
 NUM_RUNS = 10
 WARM_UP = 2
-QUERY_CLASSES: tuple[str, ...] = ("LOOKUP", "GLOBAL", "TEMPORAL")
+QUERY_CLASSES: tuple[str, ...] = ("LOOKUP", "GLOBAL", "TEMPORAL", "TEMPORAL_UNBOUNDED")
 
 # entity_0 always carries the highest Zipf weight by construction
 # (see datasets.synthetic._zipf_weights), so it anchors a non-trivial
@@ -40,13 +40,14 @@ QUERY_CLASSES: tuple[str, ...] = ("LOOKUP", "GLOBAL", "TEMPORAL")
 ANCHOR_ENTITY = "entity_0"
 # A bounded one-year window inside the generated temporal span
 # (_TEMPORAL_ORIGIN=2020-01-01, span=6 years), roughly centred so that
-# both early- and late-starting facts can overlap it. Bounded on both
-# ends deliberately: this is the representative case for an interval
-# index (an open-ended "from year X onward" query can't be narrowed by
-# a year-bucketed index and degrades toward a full scan on both
-# engines — not the case this benchmark is meant to characterise).
+# both early- and late-starting facts can overlap it.
 TEMPORAL_QUERY_START = "2022"
 TEMPORAL_QUERY_END = "2023"
+# An open-ended window ("everything from 2023 onward", no end bound) over
+# the same 6-year span. SFDB resolves this via the flat, binary-searchable
+# start/end index (sfdb.sheaf.indexes.TemporalIndex.facts_ending_after)
+# instead of the year-bucket path used for the bounded case above.
+TEMPORAL_UNBOUNDED_QUERY_START = "2023"
 
 ENGINES: tuple[str, ...] = ("KnowledgeGraph", "SheafDatabase")
 
@@ -84,6 +85,13 @@ def _query_for_class(qclass: str, limit: int) -> Query:
             query_type=QueryType.TEMPORAL,
             temporal_start=TEMPORAL_QUERY_START,
             temporal_end=TEMPORAL_QUERY_END,
+            limit=limit,
+        )
+    if qclass == "TEMPORAL_UNBOUNDED":
+        return Query(
+            query_type=QueryType.TEMPORAL,
+            temporal_start=TEMPORAL_UNBOUNDED_QUERY_START,
+            temporal_end=None,
             limit=limit,
         )
     raise ValueError(f"Unknown query class: {qclass}")

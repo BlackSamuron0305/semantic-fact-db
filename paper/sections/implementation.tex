@@ -2,7 +2,7 @@
 \label{sec:implementation}
 
 The implementation is a Python 3.12+ package of approximately $15\,000$
-lines organised into ten modules and covered by $347$ passing tests. This
+lines organised into ten modules and covered by $358$ passing tests. This
 section describes the parts of the codebase that a reader would need to see
 in order to understand or reproduce the paper's claims.
 
@@ -86,7 +86,7 @@ tests (\texttt{tests/test\_cross\_engine.py}) execute the same fact stream
 and the same query set on both engines and assert canonical equality of the
 result sets. Round-trip tests (\texttt{tests/test\_roundtrip.py}) assert
 that $\psi \circ \phi = \mathrm{id}$ on both engines for a large synthetic
-population. As of the current revision, all $347$ tests pass in $\approx 3$
+population. As of the current revision, all $358$ tests pass in $\approx 3$
 seconds on a modern laptop.
 
 \subsection{Engine Adapters for External Systems}

@@ -30,7 +30,13 @@ FIGS_DIR = REPO_ROOT / "paper" / "figures"
 FIGS_DIR.mkdir(parents=True, exist_ok=True)
 SUMMARY_PATH = REPO_ROOT / "results" / "paper_suite_summary.json"
 
-QUERY_CLASSES = ("LOOKUP", "GLOBAL", "TEMPORAL")
+QUERY_CLASSES = ("LOOKUP", "GLOBAL", "TEMPORAL", "TEMPORAL_UNBOUNDED")
+QUERY_CLASS_TITLES = {
+    "LOOKUP": "LOOKUP",
+    "GLOBAL": "GLOBAL",
+    "TEMPORAL": "TEMPORAL (bounded)",
+    "TEMPORAL_UNBOUNDED": "TEMPORAL (unbounded)",
+}
 
 
 def load_summary() -> dict:
@@ -75,8 +81,8 @@ def save(fig: plt.Figure, name: str) -> None:
 
 
 def latency_chart(summary: dict, sizes: list[int], labels: list[str]) -> None:
-    """Latency comparison: KG vs SFDB for LOOKUP, GLOBAL, TEMPORAL."""
-    fig, axes = plt.subplots(1, 3, figsize=(11, 4), sharey=False)
+    """Latency comparison: KG vs SFDB for LOOKUP, GLOBAL, TEMPORAL (bounded and unbounded)."""
+    fig, axes = plt.subplots(1, 4, figsize=(14, 4), sharey=False)
     x = np.arange(len(sizes))
     w = 0.35
 
@@ -88,7 +94,7 @@ def latency_chart(summary: dict, sizes: list[int], labels: list[str]) -> None:
         ax.set_xticklabels(labels)
         ax.set_xlabel("Dataset size (facts)")
         ax.set_ylabel("Latency (ms)")
-        ax.set_title(f"{qclass} Query")
+        ax.set_title(f"{QUERY_CLASS_TITLES[qclass]} Query")
         ax.legend(fontsize=8)
         ax.set_yscale("log")
         ax.grid(axis="y", alpha=0.3, linestyle=":")
@@ -126,16 +132,16 @@ def throughput_chart(summary: dict, sizes: list[int], labels: list[str]) -> None
 
 def speedup_chart(summary: dict, sizes: list[int], labels: list[str]) -> None:
     """Speedup ratio: SFDB / KG per query class. Below 1 = SFDB faster."""
-    fig, ax = plt.subplots(figsize=(7, 4))
+    fig, ax = plt.subplots(figsize=(8, 4))
     x = np.arange(len(sizes))
-    w = 0.25
-    colors = [KG_COLOR, SHEAF_COLOR, "#55A868"]
+    w = 0.2
+    colors = [KG_COLOR, SHEAF_COLOR, "#55A868", "#8C564B"]
 
     for i, qclass in enumerate(QUERY_CLASSES):
         kg, sh = means(summary, qclass, sizes)
         ratio = [s / k if k else float("nan") for s, k in zip(sh, kg)]
-        offset = (i - 1) * w
-        ax.bar(x + offset, ratio, w, label=qclass, color=colors[i], edgecolor="white", linewidth=0.5)
+        offset = (i - 1.5) * w
+        ax.bar(x + offset, ratio, w, label=QUERY_CLASS_TITLES[qclass], color=colors[i], edgecolor="white", linewidth=0.5)
         for xi, r in zip(x, ratio):
             ax.annotate(f"{r:.2f}x", (xi + offset, r), ha="center",
                         va="bottom" if r < 1 else "top", fontsize=6)
@@ -156,17 +162,16 @@ def speedup_chart(summary: dict, sizes: list[int], labels: list[str]) -> None:
 
 def scalability_chart(summary: dict, sizes: list[int], labels: list[str]) -> None:
     """Scalability: latency vs dataset size for both engines, all classes."""
-    fig, ax = plt.subplots(figsize=(6.5, 4.5))
-    markers = {"LOOKUP": "s", "GLOBAL": "^", "TEMPORAL": "d"}
-    kg_colors = {"LOOKUP": KG_COLOR, "GLOBAL": KG_COLOR, "TEMPORAL": KG_COLOR}
-    sh_colors = {"LOOKUP": SHEAF_COLOR, "GLOBAL": SHEAF_COLOR, "TEMPORAL": SHEAF_COLOR}
+    fig, ax = plt.subplots(figsize=(7, 5))
+    markers = {"LOOKUP": "s", "GLOBAL": "^", "TEMPORAL": "d", "TEMPORAL_UNBOUNDED": "o"}
 
     for qclass in QUERY_CLASSES:
         kg, sh = means(summary, qclass, sizes)
-        ax.plot(sizes, kg, marker=markers[qclass], linestyle="-", color=kg_colors[qclass],
-                label=f"KG {qclass}", linewidth=1.3, markersize=6, alpha=0.9)
-        ax.plot(sizes, sh, marker=markers[qclass], linestyle="--", color=sh_colors[qclass],
-                label=f"SheafDB {qclass}", linewidth=1.3, markersize=6, alpha=0.9)
+        label = QUERY_CLASS_TITLES[qclass]
+        ax.plot(sizes, kg, marker=markers[qclass], linestyle="-", color=KG_COLOR,
+                label=f"KG {label}", linewidth=1.3, markersize=6, alpha=0.9)
+        ax.plot(sizes, sh, marker=markers[qclass], linestyle="--", color=SHEAF_COLOR,
+                label=f"SheafDB {label}", linewidth=1.3, markersize=6, alpha=0.9)
 
     ax.set_xscale("log")
     ax.set_yscale("log")
