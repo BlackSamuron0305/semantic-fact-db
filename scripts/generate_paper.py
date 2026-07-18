@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import platform
 import subprocess
 import sys
 from datetime import datetime
@@ -59,23 +60,54 @@ def get_uv_lock_hash() -> str:
 
 
 def generate_reproducibility_macros() -> Path:
+    """Write paper/generated/reproducibility.tex.
+
+    Prefers the real manifest a benchmark run produces
+    (results/paper_suite_reproducibility.json, written by
+    ReproducibilityRecord and consumed identically by
+    scripts/generate_tables.py) over guessing at hardware. Only falls
+    back to live introspection -- never to hardcoded placeholder values --
+    when no benchmark has been run yet, since a fabricated CPU/memory
+    string is worse than an honestly-labelled "not yet run".
+    """
     output = GENERATED_DIR / "reproducibility.tex"
     GENERATED_DIR.mkdir(parents=True, exist_ok=True)
 
-    now = datetime.now().isoformat()
-    git_hash = get_git_hash()
-    py_ver = get_python_version()
-    uv_hash = get_uv_lock_hash()
+    repro_path = REPO_ROOT / "results" / "paper_suite_reproducibility.json"
+    if repro_path.exists():
+        repro = json.loads(repro_path.read_text())
+        memory_gb = repro.get("memory_total", 0) / 1e9
+        git_commit = (repro.get("git") or {}).get("commit", "unknown")[:7]
+        content = f"""% Auto-generated reproducibility macros
+% Source: results/paper_suite_reproducibility.json
+\\providecommand{{\\generatedcpu}}{{{repro.get("cpu_model", "unknown")} ({repro.get("cpu_count", "?")} cores)}}
+\\providecommand{{\\generatedmemory}}{{{memory_gb:.1f} GB}}
+\\providecommand{{\\generatedos}}{{{repro.get("os", "unknown")} {repro.get("os_release", "")}}}
+\\providecommand{{\\generatedhash}}{{{git_commit}}}
+\\providecommand{{\\generatedpython}}{{{repro.get("python_version", "unknown")}}}
+\\providecommand{{\\generateduvlock}}{{{repro.get("uv_lock", "unknown")}}}
+\\providecommand{{\\generatedchecksum}}{{{repro.get("dataset_checksum", "unknown")}}}
+\\providecommand{{\\generatedseed}}{{{repro.get("seed", "unknown")}}}
+\\providecommand{{\\generateddate}}{{{repro.get("timestamp", "unknown")}}}
+"""
+        output.write_text(content)
+        return output
 
+    import psutil  # local import: only needed on this no-manifest-yet path
+
+    now = datetime.now().isoformat()
     content = f"""% Auto-generated reproducibility macros
 % Generated: {now}
-\\providecommand{{\\generatedcpu}}{{Intel(R) Core(TM) i7-12700H}}
-\\providecommand{{\\generatedmemory}}{{32 GB}}
-\\providecommand{{\\generatedos}}{{Windows 11}}
-\\providecommand{{\\generatedhash}}{{{git_hash}}}
-\\providecommand{{\\generatedpython}}{{{py_ver}}}
-\\providecommand{{\\generateduvlock}}{{{uv_hash}}}
-\\providecommand{{\\generatedchecksum}}{{auto}}
+% WARNING: no results/paper_suite_reproducibility.json found -- these are
+% live-introspected values from THIS machine, not the benchmarked run.
+% Run `uv run sfdb benchmark` first to get the real manifest.
+\\providecommand{{\\generatedcpu}}{{{platform.processor() or "unknown"} ({psutil.cpu_count(logical=True)} cores)}}
+\\providecommand{{\\generatedmemory}}{{{psutil.virtual_memory().total / 1e9:.1f} GB}}
+\\providecommand{{\\generatedos}}{{{platform.system()} {platform.release()}}}
+\\providecommand{{\\generatedhash}}{{{get_git_hash()}}}
+\\providecommand{{\\generatedpython}}{{{get_python_version()}}}
+\\providecommand{{\\generateduvlock}}{{{get_uv_lock_hash()}}}
+\\providecommand{{\\generatedchecksum}}{{not-yet-run}}
 \\providecommand{{\\generatedseed}}{{42}}
 \\providecommand{{\\generateddate}}{{{now}}}
 """

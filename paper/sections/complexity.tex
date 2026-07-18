@@ -176,22 +176,22 @@ These bounds are tested empirically by the benchmark framework
 
 \begin{enumerate}
     \item SFDB insertion is typically $O(d)$ vs.\ KG's $O(k \log T)$ for contexts
-          of depth $d$; empirically SFDB is $1.12\times$ slower than KG at
-          $100$ facts (small absolute latencies, plausibly noise-dominated)
-          and $1.31$--$1.37\times$ faster at $1\,000$ and $10\,000$ facts.
+          of depth $d$; empirically SFDB is $1.05$--$1.36\times$ faster than
+          KG at every scale measured, narrowest at $100$ facts where small
+          absolute latencies plausibly compress the gap.
     \item SFDB LOOKUP queries are faster than KG's reified-triple
-          reconstruction at every scale measured ($22$--$41\times$ across
+          reconstruction at every scale measured ($23$--$32\times$ across
           $10^2$--$10^4$ facts), consistent with both being $O(1)$-per-candidate
           lookups with a KG-side constant-factor penalty from SQLite round trips.
     \item SFDB GLOBAL queries are faster than KG's triple-table scan at
-          every scale measured ($39$--$95\times$ across $10^2$--$10^4$
+          every scale measured ($44$--$95\times$ across $10^2$--$10^4$
           facts), once the query path uses the flat stalk index rather
           than open-set enumeration; this reverses what an earlier, buggy
           implementation measured, as discussed in
           Section~\ref{sec:discussion:interpretation}.
     \item SFDB's temporal indexing is faster than KG's flat scan-and-filter
-          on both bounded ranges ($1.4$--$1.7\times$, via the year-bucketed
-          index) and unbounded ranges ($1.1$--$1.4\times$, via the flat
+          on both bounded ranges ($1.2$--$1.4\times$, via the year-bucketed
+          index) and unbounded ranges ($1.1$--$1.2\times$, via the flat
           binary-searchable index added specifically for this case), as the
           $O(y \cdot n_y)$ and $O(\log M + n)$ bounds above predict; this
           also reverses what an earlier implementation measured on

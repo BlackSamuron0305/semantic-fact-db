@@ -61,29 +61,28 @@ mean) and are omitted from the main tables for readability.
 \subsection{Insert Throughput}
 \label{sec:eval:insert}
 
-Insert throughput is close to parity between the two engines. SFDB stores
-the fact atomically as a single section, while the KG engine must decompose
-the fact into $k + 4$ triples and update three indexes per triple; whether
-that difference shows up as a measurable latency gap depends on scale.
+SFDB is faster on insert throughput at every scale measured, though the
+margin is small at the smallest scale. SFDB stores the fact atomically as
+a single section, while the KG engine must decompose the fact into $k + 4$
+triples and update three indexes per triple.
 
 \input{tables/insert_latency.tex}
 
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=0.6\textwidth]{figures/throughput.pdf}
-\caption{Insert throughput. SFDB is close to parity with the KG baseline
-across all three scales, with the ratio annotated above each bar.}
+\caption{Insert throughput (ratio annotated above each bar): SFDB is
+faster at every scale.}
 \label{fig:throughput}
 \end{figure}
 
-Both engines scale linearly with dataset size. At $100$ facts SFDB is
-$1.12\times$ \emph{slower} than KG; absolute latencies at this scale are a
-few milliseconds, small enough that per-run scheduling and allocator noise
-plausibly dominates the difference, so we do not read this as a
-structural property of the design. At $1\,000$ and $10\,000$ facts SFDB is
-$1.31$--$1.37\times$ faster, consistent with the amortised cost of
-avoiding reification once the fixed per-run overhead is no longer the
-dominant term.
+Both engines scale linearly with dataset size. SFDB's advantage is
+narrowest at $100$ facts ($1.05\times$, near parity --- absolute latencies
+here are a few milliseconds, small enough that per-run scheduling and
+allocator noise plausibly dominates) and widens to $1.36\times$ at
+$10\,000$ facts, consistent with the amortised cost of avoiding
+reification becoming a larger share of the total once fixed per-run
+overhead stops dominating.
 
 \subsection{Query Performance by Class}
 \label{sec:eval:query}
@@ -103,14 +102,16 @@ baseline on every query class at every scale.}
 \end{figure}
 
 SFDB is faster than the KG baseline on all four query classes at all three
-scales, though the size of the gap is not monotonic in scale: on LOOKUP,
-SFDB's advantage is $23\times$ at $100$ facts, peaks at $41\times$ at
-$1\,000$, and falls back to $22\times$ at $10\,000$; on GLOBAL, the same
-pattern holds ($40\times$, $95\times$, $59\times$). We do not have a
-confirmed explanation for the peak at $1\,000$ facts and flag it as an
-open question rather than fit a story to it after the fact. Across all
-three scales the range is $22$--$41\times$ for LOOKUP and $39$--$95\times$
-for GLOBAL. On LOOKUP, SFDB is faster because the stalk index returns a
+scales. On LOOKUP, the gap is not monotonic in scale: SFDB's advantage is
+$23\times$ at $100$ facts, peaks at $32\times$ at $1\,000$, and settles at
+$30\times$ at $10\,000$; we do not have a confirmed explanation for the
+peak near $1\,000$ facts and flag it as an open question rather than fit a
+story to it after the fact. GLOBAL does not share this non-monotonicity:
+the advantage grows from $44\times$ at $100$ facts to $92\times$ at
+$1\,000$ and $95\times$ at $10\,000$, roughly tracking the growing cost of
+the KG engine's table scan. Across all three scales the range is
+$23$--$32\times$ for LOOKUP and $44$--$95\times$ for GLOBAL. On LOOKUP,
+SFDB is faster because the stalk index returns a
 complete fact for the anchor entity in a single hash lookup, while the KG
 engine must locate every triple that mentions the entity through its POS
 index, gather them by event identifier, and reassemble the fact through
@@ -118,29 +119,24 @@ joins. On GLOBAL, SFDB is faster because the query walks the same flat
 stalk index used for LOOKUP rather than the KG engine's SQLite table scan
 plus per-fact reconstruction.
 
-On bounded TEMPORAL, the advantage is smaller, $1.4$--$1.7\times$, because
+On bounded TEMPORAL, the advantage is smaller, $1.2$--$1.4\times$, because
 both engines pay a comparable cost: KG reconstructs each candidate fact's
 temporal bounds from reified triples and filters in Python, while SFDB
 narrows to the year buckets the range spans via its year-bucketed temporal
 index and then filters the (larger) candidate set the same way. On
-unbounded TEMPORAL, SFDB is faster by $1.1$--$1.4\times$ --- smaller still,
-but no longer a negative result. An earlier version of this evaluation
-reported SFDB as slower than KG on exactly this query shape, because the
-year-bucketed index has no bounded set of buckets to narrow an open-ended
-range to and fell back to consulting every bucket it had ever created. We
-fixed this by adding a second, flat index over fact start/end timestamps,
-sorted and binary-searchable, used specifically when a TEMPORAL query is
-open on one end (Section~\ref{sec:discussion:temporal-unbounded} describes
-the fix and the numbers it replaces). The result is that both TEMPORAL
-variants are now faster on SFDB, by a smaller margin than LOOKUP or GLOBAL
-because both engines still do comparable per-candidate filtering work once
-the candidate set is identified.
+unbounded TEMPORAL, SFDB is faster by $1.1$--$1.2\times$ via a second,
+flat, binary-searchable index maintained specifically for ranges open on
+one end; this used to be a negative result for SFDB before that index
+existed, and Section~\ref{sec:discussion:temporal-unbounded} discusses the
+history. On both TEMPORAL variants, the margin is smaller than LOOKUP or
+GLOBAL because both engines still do comparable per-candidate filtering
+work once the candidate set is identified.
 
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=0.6\textwidth]{figures/speedup.pdf}
-\caption{Ratio of SFDB to KG latency across query classes. All values are
-below one: SFDB is faster on every class at every scale measured.}
+\caption{SFDB/KG latency ratio by query class; all bars below the parity
+line mean SFDB is faster.}
 \label{fig:speedup}
 \end{figure}
 
@@ -157,20 +153,19 @@ averaged over ten independent runs.
 \centering
 \includegraphics[width=0.6\textwidth]{figures/memory.pdf}
 \caption{Resident memory delta from inserting $N$ facts. SFDB uses
-$1.2$--$3.4\times$ more memory than the KG baseline at every scale
-measured.}
+$1.3$--$2.5\times$ more memory than the KG baseline at the two larger
+scales measured; see text for why the $100$-fact point is excluded.}
 \label{fig:memory}
 \end{figure}
 
-SFDB uses $1.2$--$3.4\times$ more resident memory per fact than the KG
-baseline, though the high end of that range is measured where the
-absolute deltas are smallest: at $100$ facts, KG's own delta is well under
-$0.1$\,MB, so the $3.4\times$ figure at that scale is more a statement
-about measurement-floor noise than about the design. At $1\,000$ and
-$10\,000$ facts, where both deltas are large enough to measure reliably,
-the ratio is $1.2$--$2.5\times$, and we take that as the more
-representative figure. The cost has a direct structural explanation: the
-topology
+SFDB uses $1.3$--$2.5\times$ more resident memory per fact than the KG
+baseline at $1\,000$ and $10\,000$ facts, where both deltas are large
+enough to measure reliably. At $100$ facts both deltas are under
+$0.03$\,MB total --- close enough to the measurement floor that the
+observed ratio (SFDB measuring \emph{lower} than KG at that scale) is
+noise, not signal, and we exclude it from the headline range rather than
+report a reversal the design offers no mechanism for. The cost has a
+direct structural explanation: the topology
 builder assigns each fact to roughly eight to ten open sets (event,
 subject and object entities, temporal bucket, context and its ancestors,
 and two provenance buckets), and the stalk, neighbourhood, context, and
@@ -227,40 +222,35 @@ Section~\ref{sec:correctness}.
 Five findings summarise the evaluation:
 
 \begin{enumerate}
-    \item \textbf{Inserts are close to parity, and the sign of the gap
-          depends on scale}: SFDB is $1.12\times$ \emph{slower} than KG at
-          $100$ facts (a difference of a millisecond or two, plausibly
-          noise), and $1.31$--$1.37\times$ faster at $1\,000$ and
-          $10\,000$ facts, explained by the absence of reification
-          overhead once fixed per-run costs stop dominating.
+    \item \textbf{Inserts are $1.05$--$1.36\times$ faster on SFDB at every
+          scale measured}, narrowest at $100$ facts where absolute
+          latencies are small enough that noise plausibly compresses the
+          gap, explained by the absence of reification overhead.
 
-    \item \textbf{LOOKUP queries are $22$--$41\times$ faster on SFDB}: the
+    \item \textbf{LOOKUP queries are $23$--$32\times$ faster on SFDB}: the
           stalk index resolves entity anchors in $O(1)$ hash lookups
           against the KG baseline's $O(k)$ triple reconstruction.
 
-    \item \textbf{GLOBAL and bounded TEMPORAL queries are $39$--$95\times$
-          and $1.4$--$1.7\times$ faster on SFDB}, respectively, once the
+    \item \textbf{GLOBAL and bounded TEMPORAL queries are $44$--$95\times$
+          and $1.2$--$1.4\times$ faster on SFDB}, respectively, once the
           query path uses the flat stalk and temporal indexes instead of
           enumerating topology open sets one context at a time.
 
-    \item \textbf{Unbounded TEMPORAL queries are $1.1$--$1.4\times$ faster
-          on SFDB}, once resolved against a second, flat, binary-searchable
-          temporal index rather than falling back to every year bucket the
-          year-bucketed index has ever created. This closes what an
-          earlier version of this evaluation reported as SFDB's one
-          remaining negative result (Section~\ref{sec:discussion:temporal-unbounded}).
+    \item \textbf{Unbounded TEMPORAL queries are $1.1$--$1.2\times$ faster
+          on SFDB}, via the same kind of flat index that fixed GLOBAL,
+          built specifically for ranges the year-bucketed index cannot
+          narrow (Section~\ref{sec:discussion:temporal-unbounded}).
 
-    \item \textbf{SFDB uses $1.2$--$3.4\times$ more resident memory per
-          fact}: the latency advantages above are funded by keeping
-          redundant per-open-set index structure in memory rather than
-          relying on SQLite joins at query time.
+    \item \textbf{SFDB uses $1.3$--$2.5\times$ more resident memory per
+          fact at $1\,000$ and $10\,000$ facts}: the latency advantages
+          above are funded by keeping redundant per-open-set index
+          structure in memory rather than relying on SQLite joins at
+          query time.
 \end{enumerate}
 
 We do not claim SFDB is universally superior to the KG baseline; the
-memory cost is real, reported plainly, and is now the paper's only
-remaining latency-unrelated tradeoff, since the unbounded-temporal gap
-that an earlier version of this evaluation reported has been closed
-(Section~\ref{sec:discussion:temporal-unbounded}).
+memory cost is real, reported plainly, and is the paper's one remaining
+tradeoff.
 
 \subsection{Limitations of the Evaluation}
 \label{sec:eval:limitations}

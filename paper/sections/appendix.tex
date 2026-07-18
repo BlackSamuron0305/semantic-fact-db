@@ -1,30 +1,237 @@
-\section{Appendix}
+\appendix
+\section{Supplementary Formal Material}
 \label{sec:appendix}
 
-\subsection{Proofs}
-\label{sec:appendix:proofs}
+This appendix collects formal content referenced from the main text but
+not required to follow it: definitions that are not cited by number
+elsewhere in the paper (Appendix~\ref{sec:appendix:definitions}), and the
+standard theorems that follow from the formal model of
+Section~\ref{sec:mathematical_model} but that this paper does not build
+on directly (Appendix~\ref{sec:appendix:theorems}). The one theorem the
+paper's argument actually depends on, cross-engine equivalence
+(Theorem~\ref{thm:equivalence}), is proved in place in
+Section~\ref{sec:correctness} rather than here.
 
-Detailed proofs of all theorems are available in the repository at
-\texttt{research/proofs/}. These include:
+\subsection{Additional Definitions}
+\label{sec:appendix:definitions}
 
+\begin{definition}[Entity]
+\label{def:entity}
+An \emph{entity} is a distinguished identifier $\varepsilon \in \mathcal{E} \subseteq \mathcal{I}$
+with:
 \begin{itemize}
-    \item Presheaf structure (Section~\ref{sec:categorical}).
-    \item Sheaf condition, locality, and gluing (Section~\ref{sec:sheaf-remark}).
-    \item Global sections (Definition~\ref{def:globalsection}).
-    \item Restriction maps (Definition~\ref{def:restriction}).
-    \item Local sections (Definition~\ref{def:localsection}).
-    \item Stalks (Definition~\ref{def:stalk}).
-    \item Alexandrov topology (Definition~\ref{def:topology}).
+    \item A unique identifier $\operatorname{id}(\varepsilon) \in \mathcal{I}$.
+    \item A semantic type $\operatorname{type}(\varepsilon) \in \mathbf{SemanticType}$.
+    \item An optional name $\operatorname{name}(\varepsilon)$.
+    \item Optional attributes $\operatorname{attrs}(\varepsilon) \subseteq \mathcal{V}^*$.
 \end{itemize}
+If $f = (i, s, r, \vec{o}, c, k, m)$ is a fact, then $s \in \mathcal{E}$.
+\end{definition}
 
-\subsection{Algorithms}
-\label{sec:appendix:algorithms}
+\begin{definition}[Relation]
+\label{def:relation}
+A \emph{relation} is a distinguished identifier $\rho \in \mathcal{R} \subseteq \mathcal{I}$
+with:
+\begin{itemize}
+    \item A unique identifier $\operatorname{id}(\rho) \in \mathcal{I}$.
+    \item An arity $\operatorname{arity}(\rho) \geq 0$.
+    \item Slot types $\operatorname{slots}(\rho) \in \mathbf{SemanticType}^*$.
+\end{itemize}
+A fact $f = (i, s, r, \vec{o}, c, k, m)$ is well-typed iff
+$\operatorname{arity}(r) = |\vec{o}|$ and each $\omega_j$ conforms to
+$\operatorname{slots}(r)_j$.
+\end{definition}
 
-Pseudocode for all algorithms is available at
-\texttt{research/mathematics/algorithms.md}.
+\begin{definition}[Open Set]
+\label{def:openset}
+An \emph{open set} $U \in \mathcal{T}$ is a subset of $X$ that is declared open.
+In the Alexandrov topology induced by $(\mathcal{C}, \leq)$, every down-set
+$\downarrow c = \{d \in \mathcal{C} \mid d \leq c\}$ is open.
+To each context $c$ we associate $U_c = \{f \in \mathcal{I} \mid \operatorname{context}(f) \leq c\}$.
+Properties: $U_{\top} = X$, $U_{c_1} \cap U_{c_2} = U_{c_1 \wedge c_2}$.
+\end{definition}
 
-\subsection{Validation}
-\label{sec:appendix:validation}
+\begin{definition}[Knowledge State]
+\label{def:knowledgestate}
+A \emph{knowledge state} is $\Sigma = (X, F)$ where $X$ is a finite topological space
+of fact identifiers and $F$ is a presheaf on $X$ assigning facts to open sets.
+State transitions: insert $\Sigma \mapsto \Sigma \cup \{f\}$,
+delete $\Sigma \mapsto \Sigma \setminus \{f\}$,
+update $\Sigma \mapsto (\Sigma \setminus \{f\}) \cup \{f'\}$.
+\end{definition}
 
-The implementation-to-definition validation table is available at
-\texttt{research/mathematics/validation.md}.
+\begin{definition}[Canonical Query]
+\label{def:canonicalquery}
+A \emph{canonical query} is $Q = (\tau, s, r, \vec{o}, c, k_{\min}, n_{\max})$ where:
+$\tau \in \{\text{FACT}, \text{WALK}, \text{JOIN}, \text{GLUE}\}$ is the query mode,
+$s \in \mathcal{E} \cup \{\ast\}$ is the subject (wildcard $\ast$ matches all),
+$r \in \mathcal{R} \cup \{\ast\}$ is the relation,
+$\vec{o} \in \mathcal{V}^* \cup \{\ast\}$ is the object pattern,
+$c \in \mathcal{C} \cup \{\ast\}$ is the context,
+$k_{\min} \in [0,1]$ is the minimum confidence,
+$n_{\max} \in \mathbb{N}$ is the result limit.
+The denotation $\llbracket Q \rrbracket_\Sigma$ is the set of facts matching $Q$.
+\end{definition}
+
+\begin{definition}[Canonical Result]
+\label{def:canonicalresult}
+A \emph{canonical result} is $R = \llbracket Q \rrbracket_\Sigma$,
+a set of canonical facts. Two results $R_1, R_2$ are equivalent iff
+$|R_1| = |R_2|$ and there exists a bijection $\phi: R_1 \to R_2$ preserving
+all semantic components up to identifier isomorphism. This bijection-based
+notion is given here for completeness; it is not the definition the
+implementation or the equivalence proof use. Section~\ref{sec:correctness}
+defines \emph{semantic equivalence} (Definition~\ref{def:semanticequiv})
+as literal equality of order-independent, type-preserving canonical result
+sets, which is what the benchmark harness checks and what
+Theorem~\ref{thm:equivalence} proves; that is the operative definition
+throughout the rest of the paper.
+\end{definition}
+
+\subsection{Theorems and Proofs}
+\label{sec:appendix:theorems}
+
+The definitions above and in Section~\ref{sec:formal_definitions} satisfy
+the standard consequences one would expect of a presheaf formalisation.
+None of the theorems below is cited by number elsewhere in the paper; we
+record them here as a completeness check on the formal model rather than
+as load-bearing results, in contrast to Theorem~\ref{thm:equivalence}
+(Section~\ref{sec:correctness}), which the paper's central claim actually
+depends on.
+
+\subsubsection{Semantic Preservation}
+\label{sec:thm:preservation}
+
+\begin{theorem}[Semantic Preservation / Round-trip Correctness]
+\label{thm:preservation}
+Let $T: \mathcal{F} \to \mathcal{T}(\mathcal{F})$ be the triple decomposition
+function (reifying an $n$-ary fact into $2+n$ triples), and
+$R: \mathcal{T}(\mathcal{F}) \to \mathcal{F}$ be the reconstruction function.
+For any semantic fact $f \in \mathcal{F}$:
+\[
+R(T(f)) = f.
+\]
+\end{theorem}
+
+\begin{proof}[Proof Sketch]
+Decomposition $T$ creates triples $(s, \mathtt{rdf:type}, \mathtt{rdf:Statement})$,
+$(s, \mathtt{rdf:subject}, f.\text{subject})$, $(s, \mathtt{rdf:predicate}, f.\text{relation})$,
+and $(s, \mathtt{rdf:object}_j, f.\text{objects}_j)$ for each $j$.
+Reconstruction $R$ groups triples by statement ID $s$ and inverts each step.
+Since $T$ is injective and $R$ is its left inverse on $\operatorname{im}(T)$,
+the round-trip is identity.
+\end{proof}
+
+\subsubsection{Functoriality of Restriction}
+
+\begin{theorem}[Restriction Functoriality]
+\label{thm:restriction}
+The restriction maps $\rho_{d,c}: F(d) \to F(c)$ for $c \leq d$ satisfy:
+\[
+\rho_{c,c} = \operatorname{id}_{F(c)}, \qquad
+\rho_{e,c} = \rho_{d,c} \circ \rho_{e,d} \quad (c \leq d \leq e).
+\]
+Hence $F: \mathcal{C}^{\mathrm{op}} \to \mathbf{Set}$ is a functor (a presheaf).
+\end{theorem}
+
+\subsubsection{Sheaf Axioms}
+
+As discussed in Section~\ref{sec:sheaf-remark}, these hold vacuously on
+the Alexandrov topology used throughout this paper; we record their
+statements for completeness, not as a technical contribution.
+
+\begin{theorem}[Locality]
+\label{thm:locality}
+Let $F$ be a presheaf on $(X, \mathcal{T})$, $U \in \mathcal{T}$,
+$\{U_i\}$ an open cover of $U$, and $s, t \in F(U)$.
+If $\rho_{U,U_i}(s) = \rho_{U,U_i}(t)$ for all $i$, then $s = t$.
+\end{theorem}
+
+\begin{theorem}[Gluing]
+\label{thm:gluing}
+Let $F$ be a sheaf on $(X, \mathcal{T})$, $U \in \mathcal{T}$,
+$\{U_i\}$ an open cover of $U$, and $\{s_i \in F(U_i)\}$ a compatible family:
+$\rho_{U_i, U_i \cap U_j}(s_i) = \rho_{U_j, U_i \cap U_j}(s_j)$ for all $i,j$.
+Then there exists a unique $s \in F(U)$ with $\rho_{U,U_i}(s) = s_i$ for all $i$.
+\end{theorem}
+
+\begin{proof}[Proof Sketch]
+For each $x \in U$, pick $i$ with $x \in U_i$ and define $s(x) = s_i(x)$.
+Compatibility ensures this is well-defined on overlaps.
+Uniqueness follows from the locality axiom.
+\end{proof}
+
+\subsubsection{Canonical Equivalence}
+
+\begin{theorem}[Invertibility of the Canonical Mapping]
+\label{thm:canonical}
+Let $\phi: \mathcal{F} \to \mathfrak{F}$ be the canonical mapping from facts to canonical facts,
+and $\psi: \mathfrak{F} \to \mathcal{F}$ the inverse mapping. Then:
+\[
+\psi(\phi(f)) = f,\quad \phi(\psi(\mathfrak{f})) = \mathfrak{f}
+\]
+for all $f \in \mathcal{F}$, $\mathfrak{f} \in \mathfrak{F}$.
+\end{theorem}
+
+Cross-engine query equivalence between $\Sigma_{\mathrm{KG}}$ and
+$\Sigma_{\mathrm{Sheaf}}$ is stated and proved as
+Theorem~\ref{thm:equivalence} in Section~\ref{sec:correctness}, together
+with the canonical-form machinery (Definitions~\ref{def:lossless}
+and~\ref{def:semanticequiv}) it depends on; we do not restate it here to
+avoid a second, weaker copy of the same claim.
+
+\subsubsection{Structural Properties}
+
+\begin{theorem}[Context Meet as Open Set Intersection]
+\label{thm:meet}
+For any $c_1, c_2 \in \mathcal{C}$ in the Alexandrov topology $\mathcal{T}_A$:
+\[
+U_{c_1} \cap U_{c_2} = U_{c_1 \wedge c_2}.
+\]
+\end{theorem}
+
+\begin{proof}
+$d \in U_{c_1} \cap U_{c_2}$ iff $d \leq c_1$ and $d \leq c_2$, which is
+equivalent to $d \leq c_1 \wedge c_2$, i.e., $d \in U_{c_1 \wedge c_2}$.
+\end{proof}
+
+\begin{theorem}[Preservation of Referential Integrity]
+\label{thm:integrity}
+For any knowledge state $\Sigma$ and fact $f \in \Sigma$:
+\[
+\operatorname{subject}(f) \in \mathcal{E}_\Sigma,\quad
+\operatorname{relation}(f) \in \mathcal{R}_\Sigma,\quad
+\forall \omega_j \in \vec{o}: \omega_j \in \mathcal{E}_\Sigma \text{ if reference}.
+\]
+\end{theorem}
+
+\begin{theorem}[Determinism of Query Execution]
+\label{thm:determinism}
+For a fixed query $Q$ and fixed knowledge state $\Sigma$,
+the result $\llbracket Q \rrbracket_\Sigma$ is uniquely determined,
+independent of execution order, caching state, parallelism, or query history.
+\end{theorem}
+
+\begin{theorem}[Consistency of Global Sections]
+\label{thm:global}
+A family of local sections $\{s_i \in F(U_i)\}$ can be glued to a global section
+$s \in F(\mathcal{C})$ iff for every pair $(i,j)$:
+\[
+\rho_{U_i, U_i \cap U_j}(s_i) = \rho_{U_j, U_i \cap U_j}(s_j).
+\]
+\end{theorem}
+
+\subsection{Further Detail}
+\label{sec:appendix:further}
+
+Fully worked proofs of every theorem above, pseudocode for the
+algorithms described in Section~\ref{sec:system-architecture}, and the
+implementation-to-definition validation table are kept in the repository
+rather than reproduced here, since they change with the code and would
+go stale in a typeset PDF:
+
+\begin{description}
+    \item[Proofs] \texttt{research/proofs/}
+    \item[Algorithms] \texttt{research/mathematics/algorithms.md}
+    \item[Validation table] \texttt{research/mathematics/validation.md}
+\end{description}

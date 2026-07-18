@@ -5,10 +5,11 @@
 \label{sec:discussion:interpretation}
 
 The measurements in Section~\ref{sec:evaluation} show SFDB faster than the
-KG baseline on every query class measured: $22$--$41\times$ on LOOKUP,
-$39$--$95\times$ on GLOBAL, $1.4$--$1.7\times$ on bounded TEMPORAL queries,
-and $1.1$--$1.4\times$ on unbounded TEMPORAL queries, at close-to-parity
-insert latency. This was not the paper's original finding, on two separate
+KG baseline on every query class measured: $23$--$32\times$ on LOOKUP,
+$44$--$95\times$ on GLOBAL, $1.2$--$1.4\times$ on bounded TEMPORAL queries,
+and $1.1$--$1.2\times$ on unbounded TEMPORAL queries, and faster on
+inserts too ($1.05$--$1.36\times$). This was not the paper's original
+finding, on two separate
 occasions. An earlier iteration of this evaluation reported GLOBAL queries
 as SFDB's weak point --- up to three orders of magnitude slower than the KG
 baseline --- because the query path enumerated topology open sets rather
@@ -29,8 +30,8 @@ look, from the outside, exactly like a fundamental tradeoff until someone
 checks whether a cheaper path can be built alongside the existing one.
 
 The tradeoff this paper does report, and that survives this scrutiny, is
-memory: SFDB uses $1.2$--$3.4\times$ more resident memory per fact than the
-KG baseline (Section~\ref{sec:eval:memory}). This is a structural
+memory: SFDB uses $1.3$--$2.5\times$ more resident memory per fact than the
+KG baseline at the two larger scales measured (Section~\ref{sec:eval:memory}). This is a structural
 consequence of the design, not an implementation oversight --- every fact
 is registered in roughly eight to ten open sets plus four auxiliary
 indexes, and each registration holds a live reference into memory rather
@@ -52,52 +53,31 @@ work.
 \label{sec:discussion:temporal-unbounded}
 
 The bounded TEMPORAL results in Section~\ref{sec:evaluation} use a query
-bounded on both ends (a one-year window), which is the case the
-year-bucketed temporal index is built for. An open-ended query (a start
-bound with no end, "everything from year $X$ onward") cannot be narrowed
-to a bounded set of year buckets, so a classifier that only ever consults
-that index has to fall back to every year it has ever seen. An earlier
-version of this evaluation measured exactly that: at $10^4$ facts, SFDB's
-TEMPORAL latency degraded by roughly $40\times$ relative to the bounded
-case, to the point of being slower than the KG baseline rather than
-faster, and we reported it as a second genuine, architecture-level
-limitation, distinct from the GLOBAL enumeration bug described above ---
-specifically, we wrote that it was "not a fifteen-line fix, because there
+bounded on both ends, which is the case the year-bucketed temporal index
+is built for; an open-ended query ("everything from year $X$ onward")
+cannot be narrowed to a bounded set of buckets. An earlier version of this
+evaluation measured exactly that gap: at $10^4$ facts, SFDB's TEMPORAL
+latency degraded by roughly $40\times$ relative to the bounded case, to
+the point of being slower than the KG baseline, and we reported it as an
+architecture-level limitation --- "not a fifteen-line fix, because there
 is no bounded candidate set to compute."
 
 That claim does not survive scrutiny any better than the GLOBAL one did.
 There is no bounded candidate set within the \emph{year-bucketed} index,
-but nothing requires the fix to live in that index. We added a second,
-flat structure to \texttt{sfdb.sheaf.indexes.TemporalIndex}: fact ids
-sorted by temporal end timestamp, alongside a separate set for facts with
-no end (still valid, and therefore always overlapping any open-ended
-range). A query
-with a start bound and no end bound binary-searches this sorted array for
-the first entry ending after the bound and takes everything from there
-onward, unioned with the always-valid set --- $O(\log M + n)$ in the
-number of temporally-annotated facts $M$, where $n$ is the candidate set
-size, rather than $O(N)$ for consulting every bucket. (The symmetric case,
-an end bound with no start bound, uses a mirror structure sorted by start
-timestamp.) This is exactly the design this paper's future-work section
-had proposed as the fix for this gap
-(Section~\ref{sec:future:global-index} described it before we implemented
-it); building it turned out to take an afternoon, not a research
-programme.
-
-With the flat index in place, unbounded TEMPORAL queries are
-$1.1$--$1.4\times$ faster on SFDB than on the KG baseline
-(Section~\ref{sec:eval:query}), which no longer scans every reified
-temporal triple with an advantage over SFDB's fallback, because SFDB no
-longer has a $O(N)$ fallback to fall back to. The advantage is smaller
-than on bounded TEMPORAL queries because both engines still do comparable
-per-candidate interval-overlap filtering once the candidate set is
-identified; narrowing that candidate set further (e.g.\ an interval tree
-that also incorporates the end bound when one is present) is a smaller
-optimisation than the one made here, and we did not chase it. We record
-the history here, alongside the fix, in the same spirit as
-Section~\ref{sec:discussion:interpretation}: the original measurement was
-real, the "architectural" framing around it was not, and only checking
-whether a cheap structural fix existed revealed the difference.
+but nothing requires the fix to live in that index: a second, flat,
+binary-searchable structure sorted by fact start/end timestamp, described
+mechanically in Section~\ref{sec:complexity} and implemented in
+\texttt{sfdb.sheaf.indexes.TemporalIndex}, resolves an open-ended query in
+$O(\log M + n)$ rather than the $O(N)$ full-bucket fallback. This is the
+exact fix Section~\ref{sec:future:global-index} had proposed as future
+work before we implemented it; building it took an afternoon, not a
+research programme. With it in place, unbounded TEMPORAL queries are
+$1.1$--$1.2\times$ faster on SFDB (Section~\ref{sec:eval:query}) instead
+of slower. The advantage is smaller than on LOOKUP or GLOBAL because both
+engines still do comparable per-candidate interval filtering once the
+candidate set is identified. As with the GLOBAL case, the lesson is the
+same: the original measurement was real, the "architectural" framing
+around it was not.
 
 \subsection{When the Design Helps}
 \label{sec:discussion:sheaf-wins}
@@ -128,11 +108,8 @@ pattern.
 
 The reified triple representation still wins in workloads that the SFDB
 design was not built for, even though it no longer wins on latency for any
-of the four classes reported in Section~\ref{sec:evaluation} --- including
-the open-ended temporal range that an earlier version of this evaluation
-identified as a concrete case where SFDB's indexing advantage degraded and
-the KG baseline was no worse (Section~\ref{sec:discussion:temporal-unbounded}
-describes the fix). Workloads that are essentially
+of the four classes reported in Section~\ref{sec:evaluation}. Workloads
+that are essentially
 binary---where facts genuinely are subject-predicate-object triples with
 no context, no arity, and no provenance---get no benefit from the sheaf
 structure and only pay the memory overhead of maintaining the extra
@@ -208,14 +185,10 @@ was the evaluation methodology catching itself automatically:
           inspection rather than by any automated check, and had been
           inflating the KG engine's own reconstruction cost on every
           query class that touches reified triples.
-    \item The unbounded-TEMPORAL degradation described in
-          Section~\ref{sec:discussion:temporal-unbounded} was found and
-          fixed by the same mechanism as the GLOBAL case: code inspection
-          revealed that a second flat index, sorted and binary-searchable,
-          could sit alongside the existing year-bucketed one at a fraction
-          of the engineering cost the paper had previously estimated for a
-          fix. Like the GLOBAL fix, this was not caught by the harness
-          either, since it changed only how long a correct answer took to
+    \item The unbounded-TEMPORAL degradation
+          (Section~\ref{sec:discussion:temporal-unbounded}) was found and
+          fixed the same way as the GLOBAL case: code inspection, not the
+          harness, since it changed only how long a correct answer took to
           compute.
 \end{enumerate}
 
@@ -234,22 +207,16 @@ the pre-fix numbers as a stable finding, twice.
 \label{sec:discussion:negative}
 
 Two negative results deserve to be stated plainly, because they discipline
-the paper's overall claim. An earlier version of this section reported
-three: the third was the degradation of TEMPORAL performance under an
-open-ended range, which inverted SFDB's bounded-range advantage into a
-slowdown because the year-bucketed index had no way to narrow an unbounded
-query. Section~\ref{sec:discussion:temporal-unbounded} describes the fix
-that closed it (a second, flat, binary-searchable temporal index), and
-Section~\ref{sec:eval:query} reports SFDB now $1.1$--$1.4\times$ faster on
-exactly this query shape. We keep the history here rather than deleting
-the paragraph, for the same reason the fix itself is described in detail
-elsewhere in this section: a negative result that turns out to be a fixed
-implementation gap rather than an architectural ceiling is worth recording
-as such, not quietly dropped once resolved.
+the paper's overall claim. An earlier version of this section reported a
+third --- TEMPORAL degradation under an open-ended range --- which
+Section~\ref{sec:discussion:temporal-unbounded} describes fixing; we do
+not restate that history a third time here, but note it rather than
+silently drop the count from three to two.
 
 The first of the two negative results that remain is the memory cost
-quantified in Section~\ref{sec:eval:memory}: SFDB uses $1.2$--$3.4\times$
-more resident memory per fact than the KG baseline. This is the tradeoff
+quantified in Section~\ref{sec:eval:memory}: SFDB uses $1.3$--$2.5\times$
+more resident memory per fact than the KG baseline at the two larger
+scales measured. This is the tradeoff
 that funds every latency advantage reported in this paper, and it is
 intrinsic to the design rather than an implementation artefact: redundant
 per-open-set registration is what makes the stalk and temporal indexes

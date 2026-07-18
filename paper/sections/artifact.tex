@@ -1,17 +1,13 @@
-\section{Artifact Availability}
+\section{Artifact Availability and Reproduction}
 \label{sec:artifact}
 
 The complete source code, datasets, benchmark harness, and reproducibility
-manifests are released under the MIT License at:
-{\small \url{https://github.com/BlackSamuron0305/semantic-fact-db}}
-
-\subsection{Reproducing the Results}
-\label{sec:artifact:reproducibility}
-
-Every benchmark run records a reproducibility manifest that identifies the
-git commit, Python interpreter version, \texttt{uv.lock} hash, dataset
-checksum, and random seed used to produce it. Table~\ref{tab:reproducibility}
-lists the values used for the run reported in this paper.
+manifests are released under the MIT License at
+{\small \url{https://github.com/BlackSamuron0305/semantic-fact-db}}.
+Table~\ref{tab:reproducibility} records the exact commit, interpreter,
+lock-file hash, dataset checksum, and seed behind every number in this
+paper; \texttt{results/paper\_suite\_reproducibility.json} carries the
+same manifest alongside the raw benchmark output.
 
 \begin{table}[ht]
 \centering
@@ -31,30 +27,21 @@ Generation date & \texttt{\generationdate} \\
 \end{tabular}
 \end{table}
 
-To reproduce the reported numbers from a clean clone:
+\label{sec:artifact:reproducibility}
+From a clean clone, four commands reproduce every number and figure in
+this paper (\texttt{sfdb benchmark} with no \texttt{--size} argument runs
+all three scales --- 10 timed runs and 2 warm-up iterations per query
+class per Section~\ref{sec:eval:setup} --- and exits non-zero if any
+cross-engine verification fails):
 
 \begin{verbatim}
-git clone https://github.com/BlackSamuron0305/semantic-fact-db
-cd semantic-fact-db
 uv sync --group dev
-uv run pytest                          # 358 tests should pass
-uv run sfdb benchmark                  # all 3 scales, populates results/
-uv run python scripts/generate_tables.py  # regenerates paper/tables/*.tex
-uv run python scripts/generate_paper.py
-cd paper && make                       # produces main.pdf
+uv run pytest                              # 358 tests should pass
+uv run sfdb benchmark                      # populates results/
+uv run python scripts/generate_tables.py   # tables + reproducibility macros
+uv run python scripts/generate_figures.py  # figures
+cd paper && latexmk -pdf main.tex          # main.pdf
 \end{verbatim}
-
-The \texttt{sfdb benchmark} command with no \texttt{--size} argument runs
-the full paper suite (100, 1\,000, and 10\,000 facts; 10 timed runs and 2
-warm-up iterations per query class, per the methodology in
-Section~\ref{sec:eval:setup}). It writes raw per-run measurements to
-\texttt{results/paper\_suite.csv} (also as JSON and Markdown) and an
-aggregated \texttt{results/paper\_suite\_summary.json}. Every query class
-at every scale is cross-engine verified as part of the same run; the
-command exits non-zero if any verification fails.
-
-\subsection{License}
-\label{sec:artifact:license}
 
 Source code, data generators, and benchmark harnesses are released under
 the MIT License.

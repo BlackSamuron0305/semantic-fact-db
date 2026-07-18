@@ -20,32 +20,11 @@ where:
 Let $\mathcal{F}$ denote the set of all semantic facts.
 \end{definition}
 
-\begin{definition}[Entity]
-\label{def:entity}
-An \emph{entity} is a distinguished identifier $\varepsilon \in \mathcal{E} \subseteq \mathcal{I}$
-with:
-\begin{itemize}
-    \item A unique identifier $\operatorname{id}(\varepsilon) \in \mathcal{I}$.
-    \item A semantic type $\operatorname{type}(\varepsilon) \in \mathbf{SemanticType}$.
-    \item An optional name $\operatorname{name}(\varepsilon)$.
-    \item Optional attributes $\operatorname{attrs}(\varepsilon) \subseteq \mathcal{V}^*$.
-\end{itemize}
-If $f = (i, s, r, \vec{o}, c, k, m)$ is a fact, then $s \in \mathcal{E}$.
-\end{definition}
-
-\begin{definition}[Relation]
-\label{def:relation}
-A \emph{relation} is a distinguished identifier $\rho \in \mathcal{R} \subseteq \mathcal{I}$
-with:
-\begin{itemize}
-    \item A unique identifier $\operatorname{id}(\rho) \in \mathcal{I}$.
-    \item An arity $\operatorname{arity}(\rho) \geq 0$.
-    \item Slot types $\operatorname{slots}(\rho) \in \mathbf{SemanticType}^*$.
-\end{itemize}
-A fact $f = (i, s, r, \vec{o}, c, k, m)$ is well-typed iff
-$\operatorname{arity}(r) = |\vec{o}|$ and each $\omega_j$ conforms to
-$\operatorname{slots}(r)_j$.
-\end{definition}
+$\mathcal{E} \subseteq \mathcal{I}$ and $\mathcal{R} \subseteq \mathcal{I}$
+denote the sets of entities and relations respectively, each carrying a
+type and (for relations) an arity that a fact's object tuple must match;
+Appendix~\ref{sec:appendix:definitions} gives the full structure, which is
+not needed to follow the rest of the paper.
 
 \begin{definition}[Context]
 \label{def:context}
@@ -75,14 +54,13 @@ Section~\ref{sec:sheaf-remark}, immediately below, explains why the sheaf
 condition holds vacuously on this topology and is not the paper's
 technical contribution; we do not repeat that argument here.
 
-\begin{definition}[Open Set]
-\label{def:openset}
-An \emph{open set} $U \in \mathcal{T}$ is a subset of $X$ that is declared open.
-In the Alexandrov topology induced by $(\mathcal{C}, \leq)$, every down-set
-$\downarrow c = \{d \in \mathcal{C} \mid d \leq c\}$ is open.
-To each context $c$ we associate $U_c = \{f \in \mathcal{I} \mid \operatorname{context}(f) \leq c\}$.
-Properties: $U_{\top} = X$, $U_{c_1} \cap U_{c_2} = U_{c_1 \wedge c_2}$.
-\end{definition}
+An \emph{open set} $U \in \mathcal{T}$ is a subset of $X$ declared open; in
+the Alexandrov topology induced by $(\mathcal{C}, \leq)$, every down-set
+$\downarrow c = \{d \in \mathcal{C} \mid d \leq c\}$ is open, and each
+context $c$ has an associated open set
+$U_c = \{f \in \mathcal{I} \mid \operatorname{context}(f) \leq c\}$
+(Appendix~\ref{sec:appendix:definitions} gives this formally, together
+with its intersection and top-element properties).
 
 \begin{definition}[Neighbourhood]
 \label{def:neighbourhood}
@@ -127,32 +105,14 @@ Computed by collecting local sections, checking compatibility on overlaps,
 and gluing upward until $\top$ is reached.
 \end{definition}
 
-\begin{definition}[Knowledge State]
-\label{def:knowledgestate}
-A \emph{knowledge state} is $\Sigma = (X, F)$ where $X$ is a finite topological space
-of fact identifiers and $F$ is a presheaf on $X$ assigning facts to open sets.
-State transitions: insert $\Sigma \mapsto \Sigma \cup \{f\}$,
-delete $\Sigma \mapsto \Sigma \setminus \{f\}$,
-update $\Sigma \mapsto (\Sigma \setminus \{f\}) \cup \{f'\}$.
-\end{definition}
-
-\begin{definition}[Canonical Query]
-\label{def:canonicalquery}
-A \emph{canonical query} is $Q = (\tau, s, r, \vec{o}, c, k_{\min}, n_{\max})$ where:
-$\tau \in \{\text{FACT}, \text{WALK}, \text{JOIN}, \text{GLUE}\}$ is the query mode,
-$s \in \mathcal{E} \cup \{\ast\}$ is the subject (wildcard $\ast$ matches all),
-$r \in \mathcal{R} \cup \{\ast\}$ is the relation,
-$\vec{o} \in \mathcal{V}^* \cup \{\ast\}$ is the object pattern,
-$c \in \mathcal{C} \cup \{\ast\}$ is the context,
-$k_{\min} \in [0,1]$ is the minimum confidence,
-$n_{\max} \in \mathbb{N}$ is the result limit.
-The denotation $\llbracket Q \rrbracket_\Sigma$ is the set of facts matching $Q$.
-\end{definition}
-
-\begin{definition}[Canonical Result]
-\label{def:canonicalresult}
-A \emph{canonical result} is $R = \llbracket Q \rrbracket_\Sigma$,
-a set of canonical facts. Two results $R_1, R_2$ are equivalent iff
-$|R_1| = |R_2|$ and there exists a bijection $\phi: R_1 \to R_2$ preserving
-all semantic components up to identifier isomorphism.
-\end{definition}
+A \emph{knowledge state} $\Sigma = (X, F)$ pairs a finite topological space
+of fact identifiers with a presheaf $F$ assigning facts to open sets, with
+insert/delete/update as set operations on $\Sigma$; a \emph{query}
+$Q = (\tau, s, r, \vec{o}, c, k_{\min}, n_{\max})$ denotes the set of facts
+$\llbracket Q \rrbracket_\Sigma$ matching its subject/relation/object/context/confidence
+pattern. Both are given fully in Appendix~\ref{sec:appendix:definitions}.
+Section~\ref{sec:correctness} defines the notion of \emph{result
+equivalence} actually used by the implementation and the equivalence
+proof (Definition~\ref{def:semanticequiv}), which supersedes the
+bijection-based notion an earlier version of this section stated
+independently here; we do not restate a second, competing definition.

@@ -43,11 +43,25 @@ benchmark runner and reporting cross-engine numbers on the LUBM query set.
 \subsection{Integration With a Production RDF Store}
 \label{sec:future:jena}
 
-The Apache Jena adapter based on \texttt{rdflib} is scaffolded but not
-included in the reported results. Extending it to talk to a running Jena
-TDB2 endpoint (or Virtuoso, or GraphDB) and reporting comparable numbers
-would let us report absolute performance against the state of the art
-rather than against our own baseline.
+The evaluation in Section~\ref{sec:evaluation} compares SFDB only against
+our own KG baseline; Section~\ref{sec:discussion:threats} names this as
+implementation bias and flags LOOKUP as the query class most likely to
+overstate SFDB's advantage against a mature engine. As a small, honest
+check on that risk rather than a full answer to it, we ran a single
+external-baseline spot-check: the same $1\,000$-fact stream and the same
+LOOKUP anchor entity used in Section~\ref{sec:evaluation}, inserted into
+\texttt{rdflib}~\cite{rdflib} (a real, independent, in-memory RDF library,
+reachable via \texttt{scripts/rdflib\_spotcheck.py}) and queried with the
+equivalent SPARQL pattern. SFDB was $12.9\times$ faster than rdflib on
+this single class at this single scale, both engines returning the same
+$287$ results. We report this as a preliminary, narrowly-scoped data
+point, not as validation of the paper's broader claims: it is one query
+class, one scale, and rdflib is itself an in-memory, single-process
+library rather than a disk-backed, transactionally-serious store like
+Jena TDB2, Virtuoso, or GraphDB. Extending the comparison to those systems
+at the scales and query classes reported in Section~\ref{sec:evaluation}
+--- rather than this one spot-check --- remains the future work needed to
+report absolute performance against the state of the art.
 
 \subsection{Incremental Restriction and Global-Section Maintenance}
 \label{sec:future:incremental}

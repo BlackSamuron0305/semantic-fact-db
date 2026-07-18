@@ -30,7 +30,17 @@ restriction maps specialise a fact from a broader context of validity to a
 narrower one.
 
 \input{sections/formal_definitions.tex}
-\input{sections/theorems.tex}
+
+These definitions satisfy the standard consequences one would expect of a
+presheaf formalisation --- round-trip correctness of the KG reification,
+functoriality of restriction, the locality and gluing axioms (vacuous
+here, per the remark below), and a handful of structural properties such
+as context meet coinciding with open-set intersection. None of these is
+used by number elsewhere in the paper, so we state and prove them in
+Appendix~\ref{sec:appendix:theorems} rather than interrupting the main
+narrative with eight theorem environments. The one equivalence claim this
+paper does rely on, Theorem~\ref{thm:equivalence}, is load-bearing and is
+therefore proved directly in Section~\ref{sec:correctness}, in place.
 
 \subsection{A Note on the Sheaf Condition}
 \label{sec:sheaf-remark}

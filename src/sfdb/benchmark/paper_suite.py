@@ -248,6 +248,22 @@ def _build_summary(scale_results: list[ScaleResult]) -> dict[str, Any]:
     return summary
 
 
+def _dataset_checksum(scales: tuple[int, ...]) -> str:
+    """Hash the deterministically-generated fact stream at each scale.
+
+    Regenerates each scale's dataset (cheap and deterministic under the
+    fixed seed) purely to checksum it, independent of the benchmarked
+    engines, so the reported checksum reflects the actual data the run
+    used rather than an unset placeholder.
+    """
+    per_scale = []
+    for n in scales:
+        config = SyntheticConfig(num_facts=n, num_entities=max(20, n // 10), seed=42)
+        dataset = generate_facts(config)
+        per_scale.append(ReproducibilityRecord.checksum(tuple(str(f) for f in dataset.facts)))
+    return ReproducibilityRecord.checksum(tuple(per_scale))
+
+
 def run_paper_suite(
     output_dir: str = "results",
     scales: tuple[int, ...] = PAPER_SCALES,
@@ -258,7 +274,7 @@ def run_paper_suite(
     """Run the full paper benchmark suite and write results/paper_suite.*."""
     writer = OutputWriter(output_dir)
     repro = ReproducibilityRecord()
-    repro.capture(seed=42)
+    repro.capture(seed=42, dataset_checksum=_dataset_checksum(scales))
 
     scale_results: list[ScaleResult] = []
     all_verified = True

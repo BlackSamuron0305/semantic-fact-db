@@ -82,7 +82,8 @@ def save(fig: plt.Figure, name: str) -> None:
 
 def latency_chart(summary: dict, sizes: list[int], labels: list[str]) -> None:
     """Latency comparison: KG vs SFDB for LOOKUP, GLOBAL, TEMPORAL (bounded and unbounded)."""
-    fig, axes = plt.subplots(1, 4, figsize=(14, 4), sharey=False)
+    fig, axes_grid = plt.subplots(2, 2, figsize=(9, 7), sharey=False)
+    axes = axes_grid.flatten()
     x = np.arange(len(sizes))
     w = 0.35
 
