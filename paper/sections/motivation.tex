@@ -64,17 +64,23 @@ that resolves a specific entity within a specific context becomes a single
 hash probe into the stalk at that context, returning the complete fact
 without joins. A query that scopes to a sub-tree of the context poset touches
 exactly the sections attached to that sub-tree, without scanning the whole
-store. Neither observation is deep; both are essentially bookkeeping. The
-question is whether the bookkeeping pays for itself in practice, and whether
-its costs on the queries it does not help---in particular, unrestricted
-full-scan queries---are acceptable.
+store --- directly answering the ``all facts that hold in the
+\emph{clinical.adult} context'' question above. Neither observation is deep; both are essentially bookkeeping. The
+question is whether the bookkeeping pays for itself in practice, whether it
+is a property of the design rather than an artefact of the baseline it is
+compared against, and what it costs on queries it does not help --- range
+scans and, structurally, resident memory.
 
 The remainder of the paper answers those questions concretely. Section
 \ref{sec:mathematical_model} names the structure precisely and identifies the
 minimal presheaf machinery that our implementation actually uses. Sections
 \ref{sec:system-architecture} and \ref{sec:implementation} describe the
-storage engine that realises it. Section~\ref{sec:evaluation} measures both
-the benefit on LOOKUP queries and the cost on GLOBAL queries, on identical
+storage engine that realises it. Section~\ref{sec:evaluation} measures the
+benefit on LOOKUP queries and, directly answering the ``all facts that hold
+in the \emph{clinical.adult} context'' question posed above, on CONTEXT
+queries --- plus a storage-layer control (Section~\ref{sec:eval:control})
+that checks whether either benefit is a property of the design or merely of
+avoiding a database round trip --- on identical
 workloads verified for semantic equivalence against a conventional
 triple-store baseline.
 
@@ -82,10 +88,10 @@ triple-store baseline.
 \label{sec:motivation:gap}
 
 Sheaf theory has been applied to distributed computing, sensor
-fusion~\cite{robinson2020sheaf}, and categorical database
-theory~\cite{patterson2022sheaf}. Formal Concept Analysis~\cite{ganter1999formal}
+fusion~\cite{robinson2017sheaves}, and categorical database
+theory~\cite{spivak2012functorial}. Formal Concept Analysis~\cite{ganter1999formal}
 uses similar lattice structures for concept hierarchies but does not include
 restriction maps or a notion of stalk. To the best of our knowledge, no prior
 system combines a context-indexed storage layer with a stalk-based query path
-and a mechanised proof of equivalence against a triple-store baseline on the
-same core schema.
+and a runtime-verified equivalence argument against a triple-store baseline on
+the same core schema.

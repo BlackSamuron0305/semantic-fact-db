@@ -48,7 +48,10 @@ An \emph{open set} $U \in \mathcal{T}$ is a subset of $X$ that is declared open.
 In the Alexandrov topology induced by $(\mathcal{C}, \leq)$, every down-set
 $\downarrow c = \{d \in \mathcal{C} \mid d \leq c\}$ is open.
 To each context $c$ we associate $U_c = \{f \in \mathcal{I} \mid \operatorname{context}(f) \leq c\}$.
-Properties: $U_{\top} = X$, $U_{c_1} \cap U_{c_2} = U_{c_1 \wedge c_2}$.
+Properties: $U_{\top} = X$; the assignment is monotone
+($c_1 \leq c_2 \implies U_{c_1} \subseteq U_{c_2}$); intersections follow
+Theorem~\ref{thm:meet} below ($U_{c_1 \wedge c_2}$ when the meet exists,
+$\emptyset$ for incomparable contexts).
 \end{definition}
 
 \begin{definition}[Knowledge State]
@@ -73,20 +76,13 @@ $n_{\max} \in \mathbb{N}$ is the result limit.
 The denotation $\llbracket Q \rrbracket_\Sigma$ is the set of facts matching $Q$.
 \end{definition}
 
-\begin{definition}[Canonical Result]
-\label{def:canonicalresult}
-A \emph{canonical result} is $R = \llbracket Q \rrbracket_\Sigma$,
-a set of canonical facts. Two results $R_1, R_2$ are equivalent iff
-$|R_1| = |R_2|$ and there exists a bijection $\phi: R_1 \to R_2$ preserving
-all semantic components up to identifier isomorphism. This bijection-based
-notion is given here for completeness; it is not the definition the
-implementation or the equivalence proof use. Section~\ref{sec:correctness}
-defines \emph{semantic equivalence} (Definition~\ref{def:semanticequiv})
-as literal equality of order-independent, type-preserving canonical result
+A \emph{canonical result} is $R = \llbracket Q \rrbracket_\Sigma$, a set of
+canonical facts. Section~\ref{sec:correctness} defines \emph{semantic
+equivalence} on canonical results (Definition~\ref{def:semanticequiv}) as
+literal equality of order-independent, type-preserving canonical result
 sets, which is what the benchmark harness checks and what
-Theorem~\ref{thm:equivalence} proves; that is the operative definition
-throughout the rest of the paper.
-\end{definition}
+Theorem~\ref{thm:equivalence} proves; that is the only definition of
+result equivalence used anywhere in this paper.
 
 \subsection{Theorems and Proofs}
 \label{sec:appendix:theorems}
@@ -136,29 +132,45 @@ Hence $F: \mathcal{C}^{\mathrm{op}} \to \mathbf{Set}$ is a functor (a presheaf).
 
 \subsubsection{Sheaf Axioms}
 
-As discussed in Section~\ref{sec:sheaf-remark}, these hold vacuously on
-the Alexandrov topology used throughout this paper; we record their
-statements for completeness, not as a technical contribution.
+Locality and gluing are \emph{axioms} that distinguish sheaves among
+presheaves; for an arbitrary presheaf on an arbitrary space, both fail
+in general. We record their statements here in the specific setting this
+paper uses --- a presheaf induced by a functor on the finite context
+poset, over the Alexandrov topology --- where, as discussed in
+Section~\ref{sec:sheaf-remark}, every open set is a union of minimal
+open neighbourhoods and both conditions are satisfied automatically.
+They are stated for completeness, not as a technical contribution.
 
-\begin{theorem}[Locality]
+\begin{theorem}[Locality, Alexandrov setting]
 \label{thm:locality}
-Let $F$ be a presheaf on $(X, \mathcal{T})$, $U \in \mathcal{T}$,
-$\{U_i\}$ an open cover of $U$, and $s, t \in F(U)$.
+Let $F$ be the sheaf on $(X, \mathcal{T}_A)$ induced by a functor on the
+context poset, $U \in \mathcal{T}_A$, $\{U_i\}$ an open cover of $U$,
+and $s, t \in F(U)$.
 If $\rho_{U,U_i}(s) = \rho_{U,U_i}(t)$ for all $i$, then $s = t$.
 \end{theorem}
 
-\begin{theorem}[Gluing]
+\begin{proof}[Proof Sketch]
+Every $x \in U$ lies in some $U_i$, and $\mathcal{B}(x) \subseteq U_i$,
+so $s$ and $t$ agree on every minimal neighbourhood contained in $U$;
+sections of the induced sheaf are determined by their values on minimal
+neighbourhoods.
+\end{proof}
+
+\begin{theorem}[Gluing, Alexandrov setting]
 \label{thm:gluing}
-Let $F$ be a sheaf on $(X, \mathcal{T})$, $U \in \mathcal{T}$,
+Let $F$ be as above, $U \in \mathcal{T}_A$,
 $\{U_i\}$ an open cover of $U$, and $\{s_i \in F(U_i)\}$ a compatible family:
 $\rho_{U_i, U_i \cap U_j}(s_i) = \rho_{U_j, U_i \cap U_j}(s_j)$ for all $i,j$.
 Then there exists a unique $s \in F(U)$ with $\rho_{U,U_i}(s) = s_i$ for all $i$.
 \end{theorem}
 
 \begin{proof}[Proof Sketch]
-For each $x \in U$, pick $i$ with $x \in U_i$ and define $s(x) = s_i(x)$.
-Compatibility ensures this is well-defined on overlaps.
-Uniqueness follows from the locality axiom.
+A section of the induced sheaf over $U$ is an assignment of a value to
+each minimal neighbourhood $\mathcal{B}(x) \subseteq U$, compatible
+under restriction. For each $x \in U$, pick $i$ with $x \in U_i$ and
+take the value $s_i$ assigns to $\mathcal{B}(x)$; compatibility ensures
+this is well-defined on overlaps. Uniqueness follows from
+Theorem~\ref{thm:locality}.
 \end{proof}
 
 \subsubsection{Canonical Equivalence}
@@ -182,18 +194,35 @@ avoid a second, weaker copy of the same claim.
 
 \subsubsection{Structural Properties}
 
-\begin{theorem}[Context Meet as Open Set Intersection]
+\begin{theorem}[Open-Set Intersections]
 \label{thm:meet}
 For any $c_1, c_2 \in \mathcal{C}$ in the Alexandrov topology $\mathcal{T}_A$:
 \[
-U_{c_1} \cap U_{c_2} = U_{c_1 \wedge c_2}.
+U_{c_1} \cap U_{c_2} =
+\begin{cases}
+U_{c_1 \wedge c_2} & \text{if } c_1, c_2 \text{ are comparable (the meet
+is the more specific of the two)},\\
+\emptyset & \text{otherwise.}
+\end{cases}
 \]
 \end{theorem}
 
 \begin{proof}
-$d \in U_{c_1} \cap U_{c_2}$ iff $d \leq c_1$ and $d \leq c_2$, which is
-equivalent to $d \leq c_1 \wedge c_2$, i.e., $d \in U_{c_1 \wedge c_2}$.
+A fact identifier lies in $U_{c_1} \cap U_{c_2}$ iff its context $d$
+satisfies $d \leq c_1$ and $d \leq c_2$. If $c_1 \leq c_2$, the two
+conditions reduce to $d \leq c_1 = c_1 \wedge c_2$ (symmetrically for
+$c_2 \leq c_1$). If $c_1$ and $c_2$ are incomparable, then $d \leq c_1$
+and $d \leq c_2$ would require both $c_1$ and $c_2$ to be prefixes of
+$d$, which is impossible: the two paths disagree at their first differing
+segment. Hence no such $d$ exists and the intersection is empty.
 \end{proof}
+
+Note that the longest common prefix of two incomparable contexts is their
+\emph{join} $c_1 \vee c_2$ (most specific common ancestor), not their
+meet, and it bounds the union rather than the intersection:
+$U_{c_1} \cup U_{c_2} \subseteq U_{c_1 \vee c_2}$, with equality failing
+in general (the join's open set also contains facts from sibling
+branches).
 
 \begin{theorem}[Preservation of Referential Integrity]
 \label{thm:integrity}

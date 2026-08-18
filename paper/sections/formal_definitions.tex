@@ -33,7 +33,14 @@ identified by a dot-separated path. The partial order is prefix inclusion:
 $c_1 \leq c_2$ iff $c_2$ is a prefix of $c_1$ (i.e., $c_1$ is more specific).
 The root context $\top$ (``world'') is the unique maximal element:
 $c \leq \top$ for all $c \in \mathcal{C}$.
-The meet $c_1 \wedge c_2$ is the longest common prefix.
+Joins always exist: $c_1 \vee c_2$ (the least upper bound) is the longest
+common prefix, i.e.\ the most specific common ancestor. Meets are partial:
+if $c_1 \leq c_2$ then $c_1 \wedge c_2 = c_1$, but two incomparable
+contexts have no common lower bound at all, since no context can carry two
+distinct sibling paths as prefixes. The context hierarchy is therefore a
+tree-shaped join-semilattice, not a lattice
+(Appendix~\ref{sec:appendix:theorems} states the resulting open-set
+properties).
 \end{definition}
 
 \begin{definition}[Finite Topological Space]
@@ -67,20 +74,38 @@ with its intersection and top-element properties).
 A \emph{neighbourhood} of $x \in X$ is any $U \in \mathcal{T}$ with $x \in U$.
 The neighbourhood filter is $\mathcal{N}(x) = \{U \in \mathcal{T} \mid x \in U\}$.
 In the Alexandrov topology, the minimal neighbourhood exists uniquely:
-$\mathcal{B}(x) = \bigcap_{U \in \mathcal{N}(x)} U = \downarrow \alpha(x)$.
+$\mathcal{B}(x) = \bigcap_{U \in \mathcal{N}(x)} U = \downarrow \operatorname{context}(x)$,
+using the same context-assignment function $\operatorname{context}: \mathcal{I} \to \mathcal{C}$
+that defines $U_c$ above.
 \end{definition}
 
 \begin{definition}[Restriction Map]
 \label{def:restriction}
-For $c \leq d$, the \emph{restriction map}
-$\rho_{d,c}: \mathcal{P}(\mathcal{F}_d) \to \mathcal{P}(\mathcal{F}_c)$
-sends facts valid in $d$ to the corresponding facts in sub-context $c$.
-For a single fact $f = (i, s, r, \vec{o}, d, k, m)$:
+For $c \leq d$ (so $U_c \subseteq U_d$), the \emph{restriction map}
+$\rho_{d,c}: F(d) \to F(c)$ is the identity on facts, restricted to the
+subset of $F(d)$ that already lies in $U_c$:
 \[
-\rho_{d,c}(f) = (i, s, r, \vec{o}\,', c, k, m)
+\rho_{d,c}(f) =
+\begin{cases}
+f & \text{if } \operatorname{context}(f) \leq c, \\
+\text{undefined} & \text{otherwise.}
+\end{cases}
 \]
-where $\vec{o}\,'$ is obtained by dropping object slots not meaningful in $c$.
-Functoriality: $\rho_{c,c} = \operatorname{id}$, $\rho_{e,c} = \rho_{d,c} \circ \rho_{e,d}$.
+A fact is not rewritten by restriction --- no field of $f$ changes --- it
+is simply re-indexed as an element of the smaller set $F(c)$ when its own
+context already places it there. This is the presheaf of \emph{visibility
+from an open set}: restricting a broader view to a narrower one either
+finds the fact was already visible from that narrower vantage point, or
+it was not, in which case restriction is undefined rather than
+approximate. (An earlier version of this definition described
+restriction as dropping object slots not meaningful in the target
+context; the implementation does not perform any such transformation,
+and that description is retracted here rather than left standing
+alongside code that does something else.)
+Functoriality: $\rho_{c,c} = \operatorname{id}_{F(c)}$, and for
+$c \leq d \leq e$, $\rho_{e,c} = \rho_{d,c} \circ \rho_{e,d}$ holds
+because both sides equal the identity restricted to
+$\{f \in F(e) : \operatorname{context}(f) \leq c\}$.
 \end{definition}
 
 \begin{definition}[Stalk]
@@ -90,6 +115,16 @@ $F_x = \varinjlim_{U \in \mathcal{N}(x)} F(U)$,
 the set of germs $[s]_U$ where $[s]_U \sim [t]_V$ iff $\exists W \subseteq U \cap V$
 with $x \in W$ and $s|_W = t|_W$.
 \end{definition}
+
+On an Alexandrov space this direct limit is not an abstract object: every
+point has a minimal open neighbourhood $\mathcal{B}(x)$
+(Definition~\ref{def:neighbourhood}), the limit collapses to
+$F_x \cong F(\mathcal{B}(x))$, and no germ equivalence needs to be
+computed. This is what licenses the implementation's \emph{stalk index}:
+a hash table mapping each fact identifier $x$ to the section over its
+minimal neighbourhood is literally a table of stalks, materialised in
+advance, and the paper's ``stalk lookup'' is a lookup in that table
+rather than a direct-limit computation at query time.
 
 \begin{definition}[Local Section]
 \label{def:localsection}
@@ -113,6 +148,5 @@ $\llbracket Q \rrbracket_\Sigma$ matching its subject/relation/object/context/co
 pattern. Both are given fully in Appendix~\ref{sec:appendix:definitions}.
 Section~\ref{sec:correctness} defines the notion of \emph{result
 equivalence} actually used by the implementation and the equivalence
-proof (Definition~\ref{def:semanticequiv}), which supersedes the
-bijection-based notion an earlier version of this section stated
-independently here; we do not restate a second, competing definition.
+proof (Definition~\ref{def:semanticequiv}); it is the only such
+definition in this paper.

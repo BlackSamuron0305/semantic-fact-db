@@ -94,23 +94,28 @@ class ContextPoset:
         return candidates
 
     def is_cover(self, ctx: Context, sub_contexts: list[Context]) -> bool:
-        """Check if sub_contexts form a cover of ctx.
+        """Check whether sub_contexts cover the strict lower set of ctx.
 
-        A cover is a set of sub-contexts whose join is ctx.
-        For a poset of contexts by prefix, a cover exists iff
-        every path from root to ctx passes through at least one sub_context.
+        In the Alexandrov topology, ↓ctx is the *minimal* open
+        neighbourhood of ctx, so no family of proper sub-contexts can
+        cover ↓ctx itself: ctx belongs to no ↓c with c < ctx. (This
+        join-irreducibility is precisely why the sheaf condition is
+        vacuous in this setting.) The meaningful check, implemented here,
+        is whether every stored context strictly below ctx lies below at
+        least one member of sub_contexts.
         """
         if not sub_contexts:
             return False
-        # For the prefix poset, the immediate sub-contexts cover the parent.
-        # This simplifies: the cover check depends on the poset structure.
-        return all(s < ctx for s in sub_contexts)
+        if any(not (s < ctx) for s in sub_contexts):
+            return False
+        return all(any(d <= s for s in sub_contexts) for d in self._contexts if d < ctx)
 
     def join(self, c1: Context, c2: Context) -> Context | None:
         """Compute the join (least upper bound) of two contexts.
 
-        In the prefix poset, the join is the longest common prefix
-        if one is a prefix of the other, otherwise the common prefix.
+        In the prefix poset (root maximal, more-specific below), the join
+        is the longest common prefix: the most specific common ancestor.
+        Returns None when the contexts share no leading segment.
         """
         i = 0
         while i < len(c1.segments) and i < len(c2.segments) and c1.segments[i] == c2.segments[i]:
@@ -122,24 +127,18 @@ class ContextPoset:
     def meet(self, c1: Context, c2: Context) -> Context | None:
         """Compute the meet (greatest lower bound) of two contexts.
 
-        In the prefix poset, the meet of c₁ and c₂ is the longest common
-        prefix.  If one refines the other, the more specific is returned.
-        For disjoint contexts with no common prefix beyond root, returns
-        the root context (the true meet in a bounded poset).
-
-        Returns None only when the poset is empty (no root exists).
+        Meets are partial in a prefix hierarchy: if the contexts are
+        comparable, the meet is the more specific of the two; incomparable
+        contexts have no common refinement (no path can carry two distinct
+        sibling paths as prefixes), so the meet does not exist and None is
+        returned. The longest common prefix of incomparable contexts is
+        their *join*, not their meet — see join().
         """
         if c1 <= c2:
             return c1
         if c2 <= c1:
             return c2
-        # Longest common prefix = true meet in a prefix poset
-        i = 0
-        while i < len(c1.segments) and i < len(c2.segments) and c1.segments[i] == c2.segments[i]:
-            i += 1
-        if i == 0:
-            return Context("world")  # root is the meet of disjoint branches
-        return Context(".".join(c1.segments[:i]))
+        return None
 
     @property
     def root(self) -> Context | None:
@@ -324,13 +323,15 @@ class Sheaf(Presheaf):
         # (greatest lower bound) — the most specific context that both
         # refine. When one is a sub-context of the other, the meet is
         # the more specific one. For incomparable sibling contexts,
-        # there is no common refinement in a tree, so the overlap is
-        # undefined (empty), and the condition is vacuous.
+        # there is no common refinement in a tree: meet() returns None,
+        # the overlap is empty, and the agreement condition is vacuous.
         for i, c_i in enumerate(covering_contexts):
             for j, c_j in enumerate(covering_contexts):
                 if i >= j:
                     continue
                 overlap = self._poset.meet(c_i, c_j)
+                if overlap is None:
+                    continue
                 s_i = covering_sections[c_i]
                 s_j = covering_sections[c_j]
 
@@ -406,6 +407,9 @@ class Sheaf(Presheaf):
         This is the sheaf-theoretic notion of local equality.
         """
         common_ctx = self._poset.meet(s1.context, s2.context)
+        if common_ctx is None:
+            # Incomparable contexts have no common refinement to compare on.
+            return False
         r1 = self.restrict(s1, common_ctx)
         r2 = self.restrict(s2, common_ctx)
         if r1 is None or r2 is None:

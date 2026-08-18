@@ -7,12 +7,22 @@ abstract: >
   A prototype context-indexed semantic fact database. Facts are stored as
   sections over a finite poset of contexts and retrieved through
   stalk-indexed lookup rather than triple reconstruction. A companion
-  reified triple-store baseline is provided over the same canonical schema,
-  and cross-engine semantic equivalence is verified for every query. In
-  benchmarks at up to 10,000 facts, SFDB matches KG insert throughput
-  (0.88-0.96x), is 3-30x faster on entity-anchored LOOKUP queries, and is
-  substantially slower on unrestricted GLOBAL scans -- a tradeoff we report
-  explicitly and address in the future work.
+  reified triple-store baseline (with a dict-indexed storage-layer control
+  variant) is provided over the same canonical schema, and three-way
+  cross-engine semantic equivalence is verified for every query. In
+  benchmarks at up to 100,000 facts, SFDB is 18-34x faster than the KG
+  baseline on entity-anchored LOOKUP queries, 37-102x faster on unrestricted
+  GLOBAL scans, and 2.8-4.1x faster on context-scoped CONTEXT queries, with
+  most of each advantage surviving a storage-layer control that isolates it
+  from the cost of SQLite round trips. Insert throughput and temporal-range
+  queries do not favour SFDB unconditionally: SFDB is slower than KG at the
+  smallest scale on inserts, and the temporal-range advantage does not
+  survive the storage-layer control at all -- SFDB is at parity or slower
+  than the control on bounded temporal ranges at most scales. The cost that
+  funds the advantages that do hold is memory: SFDB uses roughly 1-2.8x
+  more resident memory per fact than the KG baseline. All of this is
+  reported as measured rather than smoothed into a single directional
+  claim; see the paper (paper/main.pdf) for the full evaluation.
 version: "0.1.0"
 date-released: "2026-07-08"
 repository-code: "https://github.com/BlackSamuron0305/semantic-fact-db"

@@ -9,59 +9,111 @@ record what it was and what came of it.
 \subsection{A Flat Temporal Index for Unbounded Ranges --- Implemented}
 \label{sec:future:global-index}
 
-The GLOBAL-query fix (Section~\ref{sec:discussion:interpretation}) was
-already implemented as of the previous revision of this paper; the same
-class of gap remained, at that time, for TEMPORAL queries with an
-open-ended range (Section~\ref{sec:discussion:temporal-unbounded}): the
-year-bucketed temporal index had no bounded candidate set to fall back on,
-so it degraded toward consulting every bucket. This section originally
-proposed a flat, sorted temporal index (an interval tree, or a sorted
-array of (start, end) pairs searched by binary search) alongside the
-bucketed one, so that an unbounded query could binary-search to its
-starting point and scan forward instead. We have since implemented exactly
-that (\texttt{sfdb.sheaf.indexes.TemporalIndex.facts\_ending\_after} and
-its symmetric counterpart \texttt{facts\_starting\_before}); the
-benchmarked result is a $1.1$--$1.4\times$ SFDB speedup on unbounded
-TEMPORAL queries rather than the $\sim 40\times$ slowdown reported
-previously, described in full in
-Section~\ref{sec:discussion:temporal-unbounded}. We record the original
-proposal here rather than deleting it, since the fact that it turned out
-to be a small, well-scoped change rather than a genuine architectural
-limitation is itself part of the paper's evidence about how easy this
-class of gap is to mistake for a design ceiling.
+An earlier revision of this section proposed a flat, sorted temporal
+index alongside the year-bucketed one, so that an open-ended range query
+could binary-search to its starting point instead of degrading to a
+full-bucket fallback. That proposal has since been implemented
+(\texttt{sfdb.sheaf.indexes.TemporalIndex.facts\_ending\_after} and its
+symmetric counterpart \texttt{facts\_starting\_before}) and benchmarked;
+Section~\ref{sec:discussion:temporal-unbounded} tells the full story. We
+keep the entry, marked implemented, because a future-work item that
+turned out to be an afternoon's change rather than a research programme
+is itself evidence about how easily this class of gap is mistaken for a
+design ceiling.
 
-\subsection{Real-World Datasets and Standard Benchmarks}
+\subsection{Real-World Datasets and Standard Benchmarks --- Done}
 \label{sec:future:real-data}
 
-The evaluation uses synthetic data. Repeating it on
-LUBM~\cite{guo2005lubm} and on a subset of DBpedia or Wikidata would
-provide numbers that can be compared against published results for
-Jena, GraphDB, and Virtuoso. The LUBM data loader is already implemented
-(\texttt{sfdb.datasets.lubm}); the missing piece is wiring it into the
-benchmark runner and reporting cross-engine numbers on the LUBM query set.
+An earlier revision of this section named the evaluation's reliance on
+synthetic data as a gap. Section~\ref{sec:eval:wikidata} has since run
+the full benchmark against a genuine, organic dataset (Wikidata
+office-holder facts we did not construct), and
+Section~\ref{sec:eval:lubm} against LUBM~\cite{guo2005lubm}, the
+standard benchmark workload for RDF stores, scaled up to
+\lubmlargescale{} facts. Both moved the evaluation from
+speculation to evidence, in different ways. LOOKUP, GLOBAL, and CONTEXT
+hold on both; TEMPORAL, the one query class this paper's synthetic
+benchmark already reported as sensitive to the storage-layer control, turns
+out to be genuinely sensitive to the dataset itself too --- it beats
+both in-house baselines on Wikidata and sits at roughly parity with
+them on LUBM's two largest scales, neither matching the synthetic
+result nor each other. LUBM's topology (many large, mutually unrelated
+top-level contexts, unlike either the synthetic generator's balanced
+tree or Wikidata's one-populous-country-among-many shape) also surfaced
+a genuine performance bug in SFDB's own CONTEXT resolution
+(Section~\ref{sec:discussion:threats}'s tenth finding), fixed and
+re-verified across the entire evaluation. What remains is breadth on
+the dataset side (DBpedia, a different corner of Wikidata) and, on the
+standard-benchmark side, running LUBM against an external store rather
+than only this project's own three in-house engines, and at the much
+larger scales published LUBM results use --- see
+Section~\ref{sec:future:jena}.
 
-\subsection{Integration With a Production RDF Store}
+\subsection{Integration With Production RDF Stores --- Done}
 \label{sec:future:jena}
 
-The evaluation in Section~\ref{sec:evaluation} compares SFDB only against
-our own KG baseline; Section~\ref{sec:discussion:threats} names this as
-implementation bias and flags LOOKUP as the query class most likely to
-overstate SFDB's advantage against a mature engine. As a small, honest
-check on that risk rather than a full answer to it, we ran a single
-external-baseline spot-check: the same $1\,000$-fact stream and the same
-LOOKUP anchor entity used in Section~\ref{sec:evaluation}, inserted into
-\texttt{rdflib}~\cite{rdflib} (a real, independent, in-memory RDF library,
-reachable via \texttt{scripts/rdflib\_spotcheck.py}) and queried with the
-equivalent SPARQL pattern. SFDB was $12.9\times$ faster than rdflib on
-this single class at this single scale, both engines returning the same
-$287$ results. We report this as a preliminary, narrowly-scoped data
-point, not as validation of the paper's broader claims: it is one query
-class, one scale, and rdflib is itself an in-memory, single-process
-library rather than a disk-backed, transactionally-serious store like
-Jena TDB2, Virtuoso, or GraphDB. Extending the comparison to those systems
-at the scales and query classes reported in Section~\ref{sec:evaluation}
---- rather than this one spot-check --- remains the future work needed to
-report absolute performance against the state of the art.
+An earlier revision of this section named a comparison against a real,
+disk-backed production RDF store as ``the single highest-leverage item
+on this list,'' since every simulated reviewer persona this project
+consulted (\texttt{research/reviewer\_simulation.md}) raised it first.
+That comparison has since been run three times, against three
+independently
+engineered stores: Section~\ref{sec:eval:jena} reports
+all five query classes against a real Apache Jena TDB2 store (accessed
+over HTTP via a Fuseki server, exactly as an external client would),
+Section~\ref{sec:eval:virtuoso} reports the identical methodology
+against a real OpenLink Virtuoso store, and Section~\ref{sec:eval:graphdb}
+reports it again against a real Ontotext GraphDB store, at
+every scale this paper measures, with identical result counts on every
+row against all three. The finding is a genuine crossover rather than a clean
+win, and it reproduces independently across all three stores: SFDB
+remains faster than all three on LOOKUP, GLOBAL, and CONTEXT at every scale, while all
+three overtake SFDB on TEMPORAL from $10^4$ facts onward. We
+regard this as a more credible and more informative result than a
+one-sided win would have been, and the agreement between three unrelated
+optimisers, from three different organisations, as strong evidence the pattern is a
+property of mature production query engines generally rather than one vendor's
+implementation --- which replaces the earlier framing of
+this item as unstarted future work, the question the second revision of
+this section posed of whether a two-store agreement would hold for a
+third, and the original question of whether a single comparison would
+generalise at all.
+
+What remains open: three stores is not an exhaustive survey of
+production RDF engines, so a fourth or fifth comparison (e.g. Blazegraph
+or Stardog, or a labeled property graph store such as Neo4j, which
+would additionally require a schema translation rather than only a new
+adapter --- Section~\ref{sec:related-work:lpg} discusses why) would
+strengthen the generalisation claim further, though
+with diminishing marginal value at this point. Standard benchmark
+workloads have since also been run against all three external stores,
+not only against this project's own in-house engines: LUBM~\cite{guo2005lubm}
+(Section~\ref{sec:eval:lubm-external}) reproduces the identical
+LOOKUP/GLOBAL/CONTEXT-robust, TEMPORAL-crossover pattern against Jena,
+Virtuoso, and GraphDB, at scales up to \lubmjenalargescale{} facts, with
+both the dataset and the comparison engine varied at once --- the one
+axis-combination no other comparison in this paper tests. What remains
+is scale (LUBM has not been run at the much larger scales published LUBM
+results use) and breadth: BSBM~\cite{bizer2009bsbm} and
+WatDiv~\cite{aluc2014watdiv} have not been tried at all.
+That remains future work, but with the core "have we ever measured
+against a real store" question answered, three times over, and "have we
+ever measured against a standard workload, against a real store, varying
+both at once" question also answered, three times over.
+
+\subsection{An Incidence-Algebra Query Layer}
+\label{sec:future:incidence}
+
+Our survey of neighbouring formalisms identified incidence algebras over
+locally finite posets~\cite{rota1964moebius} as the closest mathematical
+neighbour to the context-poset design
+(Section~\ref{sec:related-work}): the context poset is exactly the kind
+of structure on which M{\"o}bius-inversion-style aggregation is defined,
+which suggests a principled query layer for roll-up and drill-down
+across context hierarchies. We deliberately did not pursue this here ---
+it is a follow-up contribution, not a missing piece of the present
+evaluation --- but it is the extension we consider most likely to add
+new query capability rather than only new speed.
 
 \subsection{Incremental Restriction and Global-Section Maintenance}
 \label{sec:future:incremental}
@@ -83,7 +135,7 @@ restriction-map protocol.
 \subsection{Compression of Contextually Redundant Data}
 \label{sec:future:compression}
 
-Section~\ref{sec:eval:memory} reports that SFDB uses $1.3$--$4.8\times$
+Section~\ref{sec:eval:memory} reports that SFDB uses \rangememkg{}
 more resident memory per fact than the KG baseline, because each fact is
 registered in roughly eight to ten open sets plus four auxiliary indexes.
 Sections that share a common context or that agree under restriction on a
@@ -102,16 +154,29 @@ An earlier version of this section proposed a hybrid system that would
 store facts under both representations and let the optimiser choose the
 access path per query, on the premise that this would combine SFDB's
 LOOKUP advantage with a GLOBAL advantage that belonged to the KG baseline.
-That premise no longer holds: Section~\ref{sec:evaluation} reports SFDB
-faster than the KG baseline on GLOBAL as well as LOOKUP, and
-Section~\ref{sec:discussion:temporal-unbounded} closes the one query shape
-(unbounded TEMPORAL) where the KG baseline had been competitive. With no
-latency-motivated reason left to maintain two copies of the data, full
-dual-representation storage is not the extension we would prioritise: it
-would double the memory cost identified in Section~\ref{sec:eval:memory}
---- the paper's one remaining tradeoff --- to hedge against a latency gap
-that the last two fixes in this evaluation have, between them, closed for
-every class we measure. A narrower version of the idea could still be
-worth revisiting if a workload surfaces a genuine KG-favoured access
-pattern this evaluation does not cover, but we would want that pattern
-identified first rather than storing everything twice speculatively.
+That specific premise no longer holds: Section~\ref{sec:evaluation} reports SFDB
+faster than the KG baseline on GLOBAL as well as LOOKUP. The storage-layer
+control did surface a genuine case where the reified design wins: on
+bounded TEMPORAL, SFDB is measurably slower than the dict-indexed KG-mem
+control at every scale measured (\rangetemporalkgmem{},
+Section~\ref{sec:eval:control}), which is
+precisely the kind of gap that would motivate a second, reified access path
+for range-scan-heavy workloads. We still do not prioritise building it here,
+for a narrower reason than the earlier premise offered: the margin
+against KG-mem on bounded TEMPORAL narrows as scale grows rather than
+widening, from roughly two-and-a-half-fold at the smallest scale measured
+down to close to parity at the largest (\rangetemporalkgmem{}, a ratio
+below $1$ meaning SFDB is slower); the widest gap sits at sub-millisecond
+absolute latencies
+for both engines, the same measurement-floor regime
+Section~\ref{sec:eval:insert} already treats cautiously for insert timing.
+SFDB also remains faster than the
+\emph{raw} KG baseline on every TEMPORAL row measured
+(Section~\ref{sec:eval:query}), so the case for a second representation
+would rest on beating a control that itself does not persist to disk,
+against a margin that is small where it is trustworthy. Doubling the memory cost
+identified in Section~\ref{sec:eval:memory} --- the paper's central
+tradeoff --- to close a gap of that size is not an obviously good trade. A
+hybrid design remains worth revisiting if a real workload shows the gap
+widening at scale, which this evaluation's four data points do not yet
+show one way or the other.

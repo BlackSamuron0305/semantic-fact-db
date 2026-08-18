@@ -130,14 +130,18 @@ verification harness.
 \begin{definition}[Consistency]
 \label{def:consistency}
 A storage engine is \emph{consistent} if every pair of overlapping sections
-agrees under restriction to their common sub-context. Formally, for every
-$c, d \in \mathcal{C}$ and every $f \in F(c)$, $g \in F(d)$ such that
-$\pi(f) = \pi(g)$ on the intersection $c \wedge d$, we have
-$\rho_{c, c \wedge d}(f) = \rho_{d, c \wedge d}(g)$.
+agrees under restriction to their common refinement. Formally, for every
+\emph{comparable} pair $c \leq d$ and every $f \in F(d)$, $g \in F(c)$ with
+$\pi(f) = \pi(g)$, we require $\rho_{d, c}(f) = g$. Incomparable contexts
+have empty overlap ($U_c \cap U_d = \emptyset$, Theorem~\ref{thm:meet}),
+so the condition constrains only comparable pairs.
 \end{definition}
 
 As noted in Section~\ref{sec:sheaf-remark}, on the finite Alexandrov topology
-this condition is vacuous: the intersection $c \wedge d$ always exists in the
-poset, restriction maps are total functions, and the check reduces to a
-tautology. The consistency checker in the implementation therefore serves as
-a defensive assertion rather than as a non-trivial theorem-proving procedure.
+this condition is vacuous: overlaps of incomparable contexts are empty, so
+there is nothing to check there; on a comparable pair, restriction
+(Definition~\ref{def:restriction}) is the identity wherever it is defined,
+so agreement is immediate rather than something that could fail. The check
+reduces to a tautology either way. The consistency checker in the implementation
+therefore serves as a defensive assertion rather than as a non-trivial
+theorem-proving procedure.

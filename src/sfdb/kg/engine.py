@@ -215,6 +215,15 @@ class DictionaryEncoder:
         self._literal_reverse[lid] = (value, typ)
         return lid
 
+    def lookup_entity(self, name: str) -> int | None:
+        """Return the id of an already-encoded entity, or None."""
+        cached = self._entity_cache.get(name)
+        if cached is not None:
+            return cached
+        cur = self._conn.execute("SELECT id FROM entity_dict WHERE name = ?", (name,))
+        row = cur.fetchone()
+        return row[0] if row else None
+
     def decode_entity(self, eid: int) -> str | None:
         cached = self._entity_reverse.get(eid)
         if cached is not None:
@@ -342,12 +351,213 @@ class IndexManager:
         )
         return cur.fetchall()
 
+    def distinct_event_ids(self, limit: int | None = None) -> list[int]:
+        """Distinct event ids in first-inserted order (optionally limited)."""
+        if limit is None:
+            cur = self._conn.execute("SELECT DISTINCT event_id FROM triples")
+        else:
+            cur = self._conn.execute("SELECT DISTINCT event_id FROM triples LIMIT ?", (limit,))
+        return [row[0] for row in cur]
+
+    def distinct_event_ids_for_context(self, ctx: str) -> list[int]:
+        """Distinct event ids whose context is ctx or a sub-context of it."""
+        cur = self._conn.execute(
+            "SELECT DISTINCT event_id FROM triples WHERE context = ? OR context LIKE ?",
+            (ctx, ctx + ".%"),
+        )
+        return [row[0] for row in cur]
+
+    def delete_event(self, event_id: int) -> None:
+        self._conn.execute("DELETE FROM triples WHERE event_id = ?", (event_id,))
+
     def count(self) -> int:
         cur = self._conn.execute("SELECT COUNT(*) FROM triples")
         return cur.fetchone()[0]
 
     def drop(self) -> None:
         self._conn.executescript("DROP TABLE IF EXISTS triples;")
+
+
+# ---------------------------------------------------------------------------
+# In-memory control variants (KG-mem)
+# ---------------------------------------------------------------------------
+
+
+class MemoryDictionaryEncoder(DictionaryEncoder):
+    """Dictionary encoder backed purely by Python dicts.
+
+    Used by the KG-mem control variant: identical encoding scheme and ids
+    to DictionaryEncoder, with the SQLite dictionary tables replaced by
+    the in-process caches the parent class already maintains. Isolates
+    the cost of the storage layer from the cost of the reification
+    scheme itself.
+    """
+
+    def __init__(self, conn: sqlite3.Connection) -> None:
+        super().__init__(conn)
+        self._next_entity = 1
+        self._next_predicate = 1
+        self._next_literal = 1
+
+    def create_tables(self) -> None:
+        pass
+
+    def encode_entity(self, name: str) -> int:
+        eid = self._entity_cache.get(name)
+        if eid is None:
+            eid = self._next_entity
+            self._next_entity += 1
+            self._entity_cache[name] = eid
+            self._entity_reverse[eid] = name
+        return eid
+
+    def encode_predicate(self, name: str) -> int:
+        pid = self._predicate_cache.get(name)
+        if pid is None:
+            pid = self._next_predicate
+            self._next_predicate += 1
+            self._predicate_cache[name] = pid
+            self._predicate_reverse[pid] = name
+        return pid
+
+    def encode_literal(self, value: str, typ: str = "string") -> int:
+        key = f"{value}|{typ}"
+        lid = self._literal_cache.get(key)
+        if lid is None:
+            lid = self._next_literal
+            self._next_literal += 1
+            self._literal_cache[key] = lid
+            self._literal_reverse[lid] = (value, typ)
+        return lid
+
+    def lookup_entity(self, name: str) -> int | None:
+        return self._entity_cache.get(name)
+
+    def decode_entity(self, eid: int) -> str | None:
+        return self._entity_reverse.get(eid)
+
+    def decode_predicate(self, pid: int) -> str | None:
+        return self._predicate_reverse.get(pid)
+
+    def decode_literal(self, lid: int) -> tuple[str, str] | None:
+        return self._literal_reverse.get(lid)
+
+    def entity_count(self) -> int:
+        return len(self._entity_cache)
+
+    def predicate_count(self) -> int:
+        return len(self._predicate_cache)
+
+    def literal_count(self) -> int:
+        return len(self._literal_cache)
+
+
+_MemRow = tuple[int, int, int, str, int, str, str, int]
+
+
+class MemoryIndexManager(IndexManager):
+    """Triple indexes backed purely by Python dicts.
+
+    Used by the KG-mem control variant: same reification rows, same scan
+    semantics, and same row ordering as IndexManager, with dict indexes
+    standing in for the SQLite tables. The only difference between the
+    KG baseline and KG-mem is therefore the storage layer on the insert
+    and query paths, which is exactly the variable the control isolates.
+    """
+
+    def __init__(self, conn: sqlite3.Connection, six_index: bool = False) -> None:
+        super().__init__(conn, six_index)
+        self._rows: list[_MemRow] = []
+        self._by_event: dict[int, list[_MemRow]] = {}
+        self._by_p: dict[int, list[_MemRow]] = {}
+        self._by_po: dict[tuple[int, int], list[_MemRow]] = {}
+        self._by_o: dict[int, list[_MemRow]] = {}
+        self._events_by_context: dict[str, dict[int, None]] = {}
+        self._next_id = 1
+
+    def create_tables(self) -> None:
+        pass
+
+    def insert_triple(self, t: EncodedTriple) -> int:
+        rid = self._next_id
+        self._next_id += 1
+        row: _MemRow = (
+            t.subject_id,
+            t.predicate_id,
+            t.object_id,
+            t.object_type,
+            t.event_id,
+            t.role,
+            t.context,
+            rid,
+        )
+        self._rows.append(row)
+        self._by_event.setdefault(t.event_id, []).append(row)
+        self._by_p.setdefault(t.predicate_id, []).append(row)
+        self._by_po.setdefault((t.predicate_id, t.object_id), []).append(row)
+        self._by_o.setdefault(t.object_id, []).append(row)
+        self._events_by_context.setdefault(t.context, {})[t.event_id] = None
+        return rid
+
+    def scan_spo(self, s: int | None, p: int | None, o: int | None) -> list[tuple]:
+        if s is None and p is not None and o is not None:
+            return list(self._by_po.get((p, o), []))
+        if s is None and p is not None and o is None:
+            return list(self._by_p.get(p, []))
+        if s is None and p is None and o is not None:
+            return list(self._by_o.get(o, []))
+        return [
+            r
+            for r in self._rows
+            if (s is None or r[0] == s) and (p is None or r[1] == p) and (o is None or r[2] == o)
+        ]
+
+    def scan_event(self, event_id: int) -> list[tuple]:
+        return list(self._by_event.get(event_id, []))
+
+    def distinct_event_ids(self, limit: int | None = None) -> list[int]:
+        ids = list(self._by_event.keys())
+        return ids if limit is None else ids[:limit]
+
+    def distinct_event_ids_for_context(self, ctx: str) -> list[int]:
+        prefix = ctx + "."
+        seen: dict[int, None] = {}
+        for c, events in self._events_by_context.items():
+            if c == ctx or c.startswith(prefix):
+                seen.update(events)
+        return list(seen)
+
+    def delete_event(self, event_id: int) -> None:
+        rows = self._by_event.pop(event_id, [])
+        if not rows:
+            return
+        doomed = {r[7] for r in rows}
+        self._rows = [r for r in self._rows if r[7] not in doomed]
+        for r in rows:
+            for index, key in (
+                (self._by_p, r[1]),
+                (self._by_o, r[2]),
+            ):
+                bucket = index.get(key)
+                if bucket is not None:
+                    index[key] = [x for x in bucket if x[7] not in doomed]
+            po_bucket = self._by_po.get((r[1], r[2]))
+            if po_bucket is not None:
+                self._by_po[(r[1], r[2])] = [x for x in po_bucket if x[7] not in doomed]
+            ctx_events = self._events_by_context.get(r[6])
+            if ctx_events is not None:
+                ctx_events.pop(event_id, None)
+
+    def count(self) -> int:
+        return len(self._rows)
+
+    def drop(self) -> None:
+        self._rows.clear()
+        self._by_event.clear()
+        self._by_p.clear()
+        self._by_po.clear()
+        self._by_o.clear()
+        self._events_by_context.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -370,6 +580,7 @@ class KnowledgeGraphEngine(DatabaseEngine):
         self._hooks = BenchmarkHooks()
         self._db_path: str = ":memory:"
         self._six_index: bool = False
+        self._storage_mode: str = "sqlite"
         self._initialized = False
         self._fact_count: int = 0
 
@@ -385,12 +596,20 @@ class KnowledgeGraphEngine(DatabaseEngine):
         cfg = config or {}
         self._db_path = cfg.get("db_path", ":memory:")
         self._six_index = cfg.get("six_index", False)
+        self._storage_mode = cfg.get("storage", "sqlite")
         self._conn = sqlite3.connect(self._db_path)
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute("PRAGMA synchronous=NORMAL")
-        self._encoder = DictionaryEncoder(self._conn)
+        if self._storage_mode == "memory":
+            # KG-mem control variant: identical reification scheme and query
+            # logic, with dict-backed dictionaries and triple indexes in
+            # place of the SQLite tables (see MemoryIndexManager docstring).
+            self._encoder = MemoryDictionaryEncoder(self._conn)
+            self._indexes = MemoryIndexManager(self._conn, self._six_index)
+        else:
+            self._encoder = DictionaryEncoder(self._conn)
+            self._indexes = IndexManager(self._conn, self._six_index)
         self._encoder.create_tables()
-        self._indexes = IndexManager(self._conn, self._six_index)
         self._indexes.create_tables()
         self._conn.execute("""
             CREATE TABLE IF NOT EXISTS reification (
@@ -531,14 +750,13 @@ class KnowledgeGraphEngine(DatabaseEngine):
     def delete(self, fact_id: Identifier) -> DeleteResult:
         self._require_init()
         assert self._conn is not None
+        assert self._encoder is not None
+        assert self._indexes is not None
         try:
-            fact_id_str = fact_id.value
-            cur = self._conn.execute("SELECT id FROM entity_dict WHERE name = ?", (fact_id_str,))
-            row = cur.fetchone()
-            if row is None:
+            event_eid = self._encoder.lookup_entity(fact_id.value)
+            if event_eid is None:
                 return DeleteResult(fact_id=fact_id, success=False, message="Fact not found")
-            event_eid = row[0]
-            self._conn.execute("DELETE FROM triples WHERE event_id = ?", (event_eid,))
+            self._indexes.delete_event(event_eid)
             self._conn.execute("DELETE FROM reification WHERE event_id = ?", (event_eid,))
             self._conn.commit()
             return DeleteResult(fact_id=fact_id, success=True)
@@ -603,14 +821,9 @@ class KnowledgeGraphEngine(DatabaseEngine):
             # directly, so an exact match plus a prefix match covers it.
             ctx_str = q.context
             if ctx_str == "world":
-                cur = self._conn.execute("SELECT DISTINCT event_id FROM triples")
+                event_ids.update(self._indexes.distinct_event_ids())
             else:
-                cur = self._conn.execute(
-                    "SELECT DISTINCT event_id FROM triples WHERE context = ? OR context LIKE ?",
-                    (ctx_str, ctx_str + ".%"),
-                )
-            for row in cur:
-                event_ids.add(row[0])
+                event_ids.update(self._indexes.distinct_event_ids_for_context(ctx_str))
 
         elif q.query_type == QueryType.NEIGHBORHOOD and q.subject is not None:
             subj_eid = self._encoder.encode_entity(q.subject.value)
@@ -625,9 +838,7 @@ class KnowledgeGraphEngine(DatabaseEngine):
                 event_ids.add(r[4])
 
         elif q.query_type == QueryType.GLOBAL:
-            cur = self._conn.execute("SELECT DISTINCT event_id FROM triples")
-            for row in cur:
-                event_ids.add(row[0])
+            event_ids.update(self._indexes.distinct_event_ids())
 
         elif q.query_type == QueryType.TEMPORAL:
             # Facts without a temporal envelope never match a temporal
@@ -656,9 +867,7 @@ class KnowledgeGraphEngine(DatabaseEngine):
                 event_ids.add(eid)
 
         else:
-            cur = self._conn.execute("SELECT DISTINCT event_id FROM triples LIMIT ?", (q.limit,))
-            for row in cur:
-                event_ids.add(row[0])
+            event_ids.update(self._indexes.distinct_event_ids(limit=q.limit))
 
         if q.limit > 0 and len(event_ids) > q.limit:
             event_ids = set(list(event_ids)[: q.limit])
@@ -865,7 +1074,19 @@ class KnowledgeGraphEngine(DatabaseEngine):
     def verify(self) -> VerificationResult:
         self._require_init()
         assert self._conn is not None
+        assert self._encoder is not None
+        assert self._indexes is not None
         errors: list[str] = []
+        if isinstance(self._indexes, MemoryIndexManager):
+            for row in self._indexes.scan_spo(None, None, None):
+                if self._encoder.decode_entity(row[0]) is None:
+                    errors.append("Orphan triples: subject_id missing from entity dictionary")
+                    break
+            for row in self._indexes.scan_spo(None, None, None):
+                if self._encoder.decode_predicate(row[1]) is None:
+                    errors.append("Orphan triples: predicate_id missing from predicate dictionary")
+                    break
+            return VerificationResult(valid=len(errors) == 0, errors=tuple(errors))
         cur = self._conn.execute(
             "SELECT COUNT(*) FROM triples t LEFT JOIN entity_dict e ON t.subject_id = e.id WHERE e.id IS NULL"
         )

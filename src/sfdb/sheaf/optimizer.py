@@ -112,8 +112,24 @@ class SheafOptimizer:
     def _classify_semilocal(self, query: Query) -> list[str]:
         result: list[str] = []
         if query.query_type == QueryType.CONTEXT and query.context:
-            for fid in self._context_index.get_fact_ids(query.context):
-                result.extend(self._openset_index.get_open_sets_for(fid))
+            # The open set named context:<c> already IS the full sub-tree
+            # union by construction (engine._assign_open_sets registers
+            # every fact into its own context's open set and every
+            # ancestor's at insert time), so a single direct lookup is the
+            # exact target set -- no need to enumerate facts whose exact
+            # context equals c and fan out through every open set each one
+            # belongs to. That fan-out used to also pull in "context:world"
+            # (the ancestor open set every fact in the corpus belongs to)
+            # whenever c is not the root, turning a query that should cost
+            # O(subtree size) into one that scans the entire corpus; result
+            # correctness was never affected (the downstream
+            # SEMI_LOCAL._matches_query filter narrows back down correctly),
+            # only performance was, which is why cross-engine verification
+            # never caught it. See paper/sections/discussion.tex for the
+            # writeup of this fix.
+            target = f"context:{query.context}"
+            if self._openset_index.get_fact_ids(target):
+                result.append(target)
         if query.query_type == QueryType.TEMPORAL and (query.temporal_start or query.temporal_end):
             for fid in self._temporal_candidate_fact_ids(query):
                 result.extend(self._openset_index.get_open_sets_for(fid))

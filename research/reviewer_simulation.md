@@ -1,5 +1,17 @@
 # Reviewer Simulation — SheafDB
 
+> **Snapshot notice (added 2026-08-16):** this simulation predates the
+> 2026-08-16 integrity pass (KG-mem storage-layer control, the CONTEXT
+> query class, restriction-graph performance/correctness fixes, corrected
+> meet/join and restriction-map definitions — see `PLAN.md` and
+> `paper/sections/discussion.tex`'s bug inventory for the full list). Several
+> weaknesses this simulation names below have since been addressed (no
+> real-baseline comparison → rdflib reference point added;
+> LOOKUP-vs-GLOBAL tradeoff framing → GLOBAL is now a measured win with a
+> storage-layer control isolating why). Treat this as the state of the
+> critique the team was working from at the time, not a current
+> assessment of the paper.
+
 ## Reviewer 1: SIGMOD / VLDB Reviewer (Database Systems Expert)
 
 ### Background

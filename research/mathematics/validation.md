@@ -38,9 +38,9 @@ This is acceptable as `SemanticFact` extends `Fact`.
 | Def 1: $m$ (dict) | ✓ | `Fact.metadata: dict` |
 | Def 4: $c \leq d$ prefix order | ✓ | `Context.__le__` implements prefix comparison |
 | Def 4: $\operatorname{depth}(c)$ | ✓ | `Context.depth()` |
-| Def 4: $c_1 \wedge c_2$ (meet) | ✓ | `Context.meet()` |
+| Def 4: $c_1 \wedge c_2$ (meet) | ✓ (corrected 2026-08-16) | `Context.meet()` is **partial**: returns the more specific context for comparable pairs, `None` for incomparable ones (no common lower bound exists in a prefix tree). An earlier version of `meet()` returned the longest common prefix unconditionally, which is the *join*, not the meet, and this row's checkmark predates that fix. |
 
-**All definitions match.**
+**All definitions match, with the meet/join distinction above now made explicit rather than glossed over.**
 
 ---
 
@@ -78,9 +78,9 @@ This is acceptable.
 | Def 6: Down-sets are open (Alexandrov) | ✓ | Context-based open set construction |
 | Def 7: $\mathcal{N}(x)$ neighbourhood filter | ✓ | `neighborhoods()` method |
 | Def 7: Minimal neighbourhood $\mathcal{B}(x)$ | ✓ | `minimal_open_set()` |
-| Def 6: $U_c \cap U_d = U_{c \wedge d}$ | ✓ | Context meet maps to set intersection |
+| Def 6: $U_c \cap U_d = U_{c \wedge d}$ | ⚠ CORRECTED 2026-08-16 | True only when $c, d$ are comparable; $U_c \cap U_d = \emptyset$ for incomparable $c, d$, since their meet does not exist (see `theorems.md` Theorem 6, restated). The row's original unconditional checkmark was wrong. |
 
-**All definitions match.** There is one implementation note: the topology
+**All definitions match, modulo the meet-is-partial correction above.** There is one implementation note: the topology
 stores open sets by name and rebuilds neighborhoods by reverse index.
 The formal definition does not specify representation.
 

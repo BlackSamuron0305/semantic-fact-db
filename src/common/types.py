@@ -210,29 +210,37 @@ class Context:
     def __str__(self) -> str:
         return ".".join(self.segments)
 
-    def meet(self, other: Context) -> Context:
-        """Greatest lower bound (meet) of two contexts."""
-        s = self.segments
-        o = other.segments
+    def meet(self, other: Context) -> Context | None:
+        """Greatest lower bound (meet): the more specific of two comparable
+        contexts.
+
+        Meets are partial in a prefix hierarchy: incomparable contexts
+        have no common refinement (no path can carry two distinct sibling
+        paths as prefixes), so None is returned for them. The longest
+        common prefix of incomparable contexts is their *join*, not their
+        meet — see join().
+        """
+        if self <= other:
+            return self
+        if other <= self:
+            return other
+        return None
+
+    def join(self, other: Context) -> Context | None:
+        """Least upper bound (join): the longest common prefix, i.e. the
+        most specific common ancestor.
+
+        Returns None only when the two contexts share no leading segment.
+        """
         common: list[str] = []
-        for a, b in zip(s, o, strict=False):
+        for a, b in zip(self.segments, other.segments, strict=False):
             if a == b:
                 common.append(a)
             else:
                 break
+        if not common:
+            return None
         return Context(".".join(common))
-
-    def join(self, other: Context) -> Context:
-        """Least upper bound (join) of two contexts.
-
-        If one is a subcontext of the other, returns the broader.
-        Otherwise returns the root.
-        """
-        if self <= other:
-            return other
-        if other <= self:
-            return self
-        return Context("world")
 
 
 @dataclass(frozen=True)

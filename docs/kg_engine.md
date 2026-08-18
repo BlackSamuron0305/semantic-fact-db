@@ -29,41 +29,43 @@ The `KnowledgeGraphEngine` is an RDF-style triple store serving as the baseline 
 ## Quick Start
 
 ```python
+from common.interfaces import Query, QueryType
+from common.schema import SemanticFact
+from common.types import Context, Identifier, Value
 from sfdb.kg.engine import KnowledgeGraphEngine
-from common.types import Fact, Identifier, Value
 
 engine = KnowledgeGraphEngine()
-engine.initialize()
+engine.create()  # storage="memory" here selects the KG-mem control variant
 
-# Insert a fact
-fact = Fact(
+# Insert a fact — SemanticFact is immutable; objects is the ordered
+# n-ary argument tuple, attributes is unordered key/value metadata.
+fact = SemanticFact(
     id=Identifier("event1"),
-    type=Identifier("Event"),
-    context=Identifier("default"),
-    arguments={
-        "subject": Value("Alice"),
-        "action": Value("runs"),
-    },
+    subject=Identifier("alice"),
+    relation=Identifier("runs"),
+    objects=(Value.literal("marathon"),),
+    context=Context("world"),
 )
 engine.insert(fact)
 
-# Lookup
-retrieved = engine.lookup(Identifier("event1"))
+# Typed query (the interface both engines and the benchmark harness use)
+result = engine.query(Query(query_type=QueryType.LOOKUP, subject=Identifier("alice")))
 
-# SPARQL query
-results = engine.query_sparql("SELECT ?s ?p ?o WHERE { ?s ?p ?o }")
+# SPARQL-like text query (a partial parser, not full SPARQL — see
+# paper/sections/limitations.tex for what surface syntax is supported)
+bindings = engine.query_sparql("SELECT ?s ?p ?o WHERE { ?s ?p ?o }")
 
 # EXPLAIN plan
-plan = engine.explain('SELECT ?s WHERE { ?s ?p ?o . FILTER(?o = "hello") }')
-print("\n".join(plan))
+plan = engine.explain(Query(query_type=QueryType.LOOKUP, subject=Identifier("alice")))
+print(plan.description, plan.steps)
 
 # Statistics
 stats = engine.statistics()
-print(f"Total triples: {stats['total_triples']}")
-
-# Visualization (Graphviz DOT format)
-dot = engine.visualize_entity_graph()
+print(f"Total facts (triples): {stats.total_facts}")
 ```
+
+For entity/predicate graph visualisation, see `sfdb.kg.visualization`
+directly; it is a separate module, not a method on the engine.
 
 ## Modules
 

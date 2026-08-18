@@ -8,13 +8,13 @@ reader can weigh what the paper does and does not claim.
 \label{sec:limits:scalability}
 
 The current prototype is single-node and in-memory. All measurements are at
-scales of $10\,000$ facts or below; behaviour at larger scales is
+scales of $100\,000$ facts or below; behaviour at larger scales is
 extrapolated from the complexity analysis of Section~\ref{sec:complexity}
 and not directly measured. Global-section computation in the worst case is
 $O(|\mathcal{C}| \cdot N^2)$, which imposes a natural ceiling on the size
 of context poset that the system can support on a single node. This
 ceiling is compounded by a concretely measured one: Section~\ref{sec:eval:memory}
-reports $1.3$--$2.5\times$ higher resident memory per fact than the KG
+reports \rangememkg{} higher resident memory per fact than the KG
 baseline, so the single-node memory budget is consumed faster by SFDB than
 by an equivalent reified store, independent of the gluing worst case.
 Distributing the store across nodes would require a partitioning strategy
@@ -32,6 +32,20 @@ operation in the implementation is a defensive consistency check rather
 than a step in a proof; in the presence of genuinely contradictory local
 data (which our schema currently forbids), the algorithm would report the
 conflict rather than resolve it.
+
+A further structural assumption deserves to be stated explicitly: the
+dot-separated path encoding makes the context hierarchy a \emph{tree}
+(each context has exactly one parent), so incomparable contexts never
+share a descendant and meets of incomparable contexts do not exist
+(Section~\ref{sec:formal_definitions}). Real-world context structures
+are not always tree-shaped --- a policy that holds in the intersection
+of two jurisdictions, or an experimental condition scoped by both a
+protocol and a lab, is naturally a DAG node with two parents. Supporting
+DAG-shaped posets would preserve the Alexandrov construction (which
+needs only a preorder) but would invalidate the prefix-string encoding,
+the longest-common-prefix join, and the single-ancestor-chain
+$O(d)$ insert path, so we scope it out here and note it as a design
+extension rather than pretending the tree assumption is costless.
 
 \subsection{Implementation Limitations}
 \label{sec:limits:implementation}
@@ -56,14 +70,87 @@ change the paper's structural findings.
 
 The KG baseline is a research prototype implemented by the same team as
 the sheaf engine. It is a controlled reference point, not a
-state-of-the-art RDF store. The baseline is fair for the purpose of
-isolating the effect of context-indexed storage because both engines
-share the same serialisation, canonicalisation, and storage backend
-(SQLite); the only architectural difference is the indexing strategy
-(triple indexes vs.\ stalk+context indexes). The evaluation therefore quantifies what
-disciplined context-indexed storage buys over a strict reification-plus-joins
-implementation at comparable engineering effort. Repeating the evaluation
-against a production RDF store on a standard benchmark such as
-LUBM~\cite{guo2005lubm}, BSBM, or WatDiv is the natural next step and is
-called out as future work. The synthetic datasets, while parameterised,
-may not exhibit all pathologies of organic knowledge graph data.
+state-of-the-art RDF store. Both engines share the same serialisation
+and canonicalisation layers, and both persist inserts to in-memory
+SQLite --- but the \emph{query} paths differ in more than indexing
+strategy: the KG baseline answers queries through SQLite, while SFDB
+answers them from in-process Python indexes and touches SQLite only on
+the write path. A comparison of the two alone therefore conflates two
+variables --- context-indexed storage versus reification, and dict
+indexes versus SQLite round trips. The evaluation separates them with
+the KG-mem control (Section~\ref{sec:eval:control}): a variant of the
+KG baseline with identical reification and query logic whose dictionary
+tables and triple indexes are Python dicts, so that the SFDB-vs-KG-mem
+ratios isolate what context-indexed storage buys with the storage-layer
+difference removed.
+
+Both the KG baseline and the KG-mem control are, however, still
+research prototypes by this project's authors, and that ceiling has
+since been addressed directly rather than left as a caveat: three real
+production stores, Apache Jena TDB2, OpenLink Virtuoso, and Ontotext
+GraphDB, are each
+compared on all five query classes at every
+scale (Section~\ref{sec:eval:jena}, Section~\ref{sec:eval:virtuoso},
+Section~\ref{sec:eval:graphdb}),
+which is the natural next step this
+section previously called out as future work. The result is a genuine
+crossover, reproduced independently against all three --- SFDB faster on
+LOOKUP/GLOBAL/CONTEXT, the production store faster on
+TEMPORAL from $10^4$ facts --- not a clean win either way, which
+we take as more credible than a one-sided result would have been, and
+the agreement between three unrelated optimisers as evidence the pattern
+generalises well beyond one vendor. What
+remains open is breadth, not existence: three stores is not an
+exhaustive survey, and LUBM~\cite{guo2005lubm} (Section~\ref{sec:eval:lubm}) has
+since been run both against the three in-house engines and against all
+three external stores at once (Section~\ref{sec:eval:lubm-external}),
+reproducing the identical pattern against every one; BSBM~\cite{bizer2009bsbm} and
+WatDiv~\cite{aluc2014watdiv} have not been tried at all, nor has LUBM at
+the much larger scales published LUBM results use.
+The dataset-bias half of this concern has since been addressed
+directly rather than left as a caveat, and the answer is not the tidy
+one the LOOKUP/GLOBAL results alone would suggest: a real-world case
+study (Section~\ref{sec:eval:wikidata}, \wikidatanumfacts{} genuine
+Wikidata facts) and the LUBM comparison both
+reproduce the LOOKUP, GLOBAL, and CONTEXT advantage, while TEMPORAL
+lands somewhere different on each --- beating both baselines on
+Wikidata, roughly at parity with them on LUBM's two largest scales,
+neither matching the synthetic benchmark's own result. The synthetic datasets, while
+parameterised, do not exhibit all pathologies of organic knowledge
+graph data, and these two comparisons are direct evidence of exactly
+that for TEMPORAL specifically --- and, for CONTEXT, direct evidence of
+something else: LUBM's topology exposed a genuine performance bug in
+SFDB's own query resolution (Section~\ref{sec:discussion:threats}'s
+tenth finding) that neither the synthetic generator nor Wikidata's data
+shape had triggered, which is itself an argument for dataset diversity
+in an evaluation independent of what any single comparison's headline
+result turns out to be.
+
+A further limitation of the KG-mem control deserves to be named rather
+than left implicit: KG-mem removes the SQLite round trip, but it still
+\emph{reconstructs} each fact from its decomposed triples on every query
+(\texttt{\_reconstruct\_fact} in the KG engine, unchanged by the
+storage-layer swap) rather than returning a stored whole-fact object the
+way SFDB's stalk index does. Nothing in principle stops a reified store
+from also maintaining a fact-id-to-materialised-fact cache alongside its
+triple indexes --- which is architecturally close to what SFDB's stalk
+index is --- at which point some of the LOOKUP, GLOBAL, and CONTEXT advantage that
+survives the KG-mem control in Section~\ref{sec:eval:control} would
+likely narrow further, for the same memory cost SFDB already pays. This
+concern is somewhat allayed by the Jena, Virtuoso, and GraphDB results:
+all three are
+exactly such mature, materialising, professionally engineered indexes,
+independently built by three different organisations, and all three
+still lose to SFDB on LOOKUP, GLOBAL, and CONTEXT at every scale measured despite
+also paying HTTP overhead SFDB does not --- so the advantage on those three
+classes does not appear to be merely an artefact of comparing against an
+under-optimised control, or of one vendor's specific engineering
+choices. The control isolates the SQLite-versus-dict variable cleanly; it does not
+isolate reconstruction-from-parts versus retrieval-of-a-whole, which is
+a second, unremoved variable the LOOKUP, GLOBAL, and CONTEXT numbers still
+partially reflect. (CONTEXT's advantage is dominated by candidate-set
+lookup rather than reconstruction, so this caveat bears on it more weakly
+than on LOOKUP and GLOBAL, but every result row is still reconstructed
+once found.) We do not add a second control for this in the
+current evaluation and name it here as an open question rather than
+letting the existing control's precision imply more than it isolates.

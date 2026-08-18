@@ -1,8 +1,9 @@
 \section{Implementation}
 \label{sec:implementation}
 
-The implementation is a Python 3.12+ package of approximately $15\,000$
-lines organised into ten modules and covered by $358$ passing tests. This
+The implementation is a Python 3.12+ package of approximately $16\,500$
+lines organised into ten modules and covered by $416$ passing tests
+(Section~\ref{sec:impl:testing}). This
 section describes the parts of the codebase that a reader would need to see
 in order to understand or reproduce the paper's claims.
 
@@ -86,17 +87,41 @@ tests (\texttt{tests/test\_cross\_engine.py}) execute the same fact stream
 and the same query set on both engines and assert canonical equality of the
 result sets. Round-trip tests (\texttt{tests/test\_roundtrip.py}) assert
 that $\psi \circ \phi = \mathrm{id}$ on both engines for a large synthetic
-population. As of the current revision, all $358$ tests pass in $\approx 3$
-seconds on a modern laptop.
+population. As of the current revision, all $416$ tests pass: the $402$
+that require no external service complete in roughly four seconds on a
+modern laptop, and a further $14$, in
+\texttt{tests/benchmark/}, exercise the live
+Jena, Virtuoso, and GraphDB adapters of Section~\ref{sec:eval:jena},
+Section~\ref{sec:eval:virtuoso}, and Section~\ref{sec:eval:graphdb} when those external services are
+reachable, and are skipped rather than failed otherwise, so their
+runtime depends on the responsiveness of servers this artifact does not
+control.
 
 \subsection{Engine Adapters for External Systems}
 \label{sec:impl:adapters}
 
-The benchmark harness supports pluggable engine adapters. Two adapters are
-fully implemented and used in the evaluation: \texttt{KGEngineAdapter} and
-\texttt{SheafEngineAdapter}. A partial adapter for Apache Jena, backed by
-the \texttt{rdflib} Python library, is available but not integrated into
-the results reported here because we do not yet claim like-for-like
-comparability with a production Jena TDB2 deployment. Scaffolds for
-Blazegraph and Neo4j exist but raise \texttt{NotImplementedError} on
-construction; they are place-holders for planned integration work.
+The benchmark harness supports pluggable engine adapters. Three adapters
+are fully implemented and used in the core verified evaluation:
+\texttt{KGEngineAdapter}, \texttt{KGMemEngineAdapter} (the storage-layer
+control of Section~\ref{sec:eval:control}, selected by a
+\texttt{storage="memory"} engine configuration), and
+\texttt{SheafEngineAdapter}. A fourth, \texttt{RdflibEngineAdapter},
+wraps the \texttt{rdflib} Python library~\cite{rdflib} and is driven by
+SPARQL text; it powers the external reference point of
+Section~\ref{sec:eval:rdflib}. An earlier revision named this class
+\texttt{JenaEngineAdapter}, which overstated what it wraps --- rdflib is
+not Apache Jena --- and we renamed it rather than leave the misleading
+name in the artifact.
+
+A fifth, \texttt{JenaTDB2EngineAdapter}, wraps a real Apache Jena TDB2
+instance: it speaks the standard SPARQL~1.1 HTTP protocol (SPARQL Update
+for inserts, SPARQL Query for reads) to a Fuseki server backing a
+disk-based TDB2 dataset, using the identical reification predicates and
+SPARQL query text as \texttt{RdflibEngineAdapter} so the two external
+comparisons are directly comparable. It powers
+Section~\ref{sec:eval:jena}'s production-store reference point. Unlike
+every other adapter in this list, the engine behind it is neither
+written nor controlled by this project's authors. Scaffolds for
+Blazegraph and Neo4j remain and still raise
+\texttt{NotImplementedError} on construction; they are place-holders for
+planned integration work.

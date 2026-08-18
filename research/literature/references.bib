@@ -46,13 +46,18 @@
   doi     = {10.1145/1322432.1322433}
 }
 
-@inproceedings{lubm2005,
-  author    = {Yuanbo Guo and Zhengxiang Pan and Jeff Heflin},
-  title     = {{LUBM}: A Benchmark for {OWL} Knowledge Base Systems},
-  booktitle = {Proceedings of the 4th International Semantic Web Conference (ISWC)},
-  year      = {2005},
-  pages     = {158--172},
-  publisher = {Springer}
+@article{lubm2005,
+  % Corrected 2026-08-16: was misattributed to ISWC 2005; LUBM's actual
+  % venue is the Journal of Web Semantics. Same paper as guo2005lubm in
+  % paper/bibliography.bib (kept under this file's pre-existing key).
+  author  = {Yuanbo Guo and Zhengxiang Pan and Jeff Heflin},
+  title   = {{LUBM}: A Benchmark for {OWL} Knowledge Base Systems},
+  journal = {Journal of Web Semantics},
+  year    = {2005},
+  volume  = {3},
+  number  = {2--3},
+  pages   = {158--182},
+  doi     = {10.1016/j.websem.2005.06.005}
 }
 
 @article{schmidt2009sp2bench,
@@ -66,12 +71,17 @@
   doi     = {10.14778/1687627.1687730}
 }
 
-@inproceedings{bizer2009bsbm,
-  author    = {Christian Bizer and Andreas Schultz},
-  title     = {The Berlin {SPARQL} Benchmark},
-  booktitle = {Proceedings of the 4th International Semantic Web Conference (ISWC)},
-  year      = {2009},
-  publisher = {Springer}
+@article{bizer2009bsbm,
+  % Corrected 2026-08-16: was misattributed to ISWC 2009; BSBM's actual
+  % venue is IJSWIS. Matches paper/bibliography.bib.
+  author  = {Christian Bizer and Andreas Schultz},
+  title   = {The Berlin {SPARQL} Benchmark},
+  journal = {International Journal on Semantic Web and Information Systems},
+  year    = {2009},
+  volume  = {5},
+  number  = {2},
+  pages   = {1--24},
+  doi     = {10.4018/jswis.2009040101}
 }
 
 @inproceedings{theoharis2005benchmarking,
@@ -153,20 +163,42 @@
   isbn      = {978-0-387-97710-2}
 }
 
-@inproceedings{patterson2022sheaf,
-  author    = {Evan Patterson},
-  title     = {Sheaf Theory in Database Theory},
-  booktitle = {Proceedings of the 3rd Annual International Symposium on Category Theory and Computer Science},
-  year      = {2022}
-}
+% Corrected 2026-08-16: patterson2022sheaf below could not be verified —
+% no such paper, venue, or symposium was found; removed rather than left
+% standing as an unverifiable citation. See abramsky2011sheaf below for
+% the verified replacement used in paper/bibliography.bib.
+%
+% @inproceedings{patterson2022sheaf,
+%   author    = {Evan Patterson},
+%   title     = {Sheaf Theory in Database Theory},
+%   booktitle = {Proceedings of the 3rd Annual International Symposium on Category Theory and Computer Science},
+%   year      = {2022}
+% }
 
 @article{robinson2020sheaf,
+  % Corrected 2026-08-16: title/venue/year were wrong. The real Robinson
+  % sensor-fusion paper is "Sheaves are the Canonical Data Structure for
+  % Sensor Integration," Information Fusion 36:208-224, 2017 (matches
+  % robinson2017sheaves in paper/bibliography.bib). Key kept for
+  % backward compatibility with existing \cite calls in this file.
   author  = {Michael Robinson},
-  title   = {Sheaf Theory in Data Fusion},
-  journal = {SIAM Review},
-  year    = {2020},
-  volume  = {62},
-  number  = {3}
+  title   = {Sheaves are the Canonical Data Structure for Sensor Integration},
+  journal = {Information Fusion},
+  year    = {2017},
+  volume  = {36},
+  pages   = {208--224},
+  doi     = {10.1016/j.inffus.2016.12.002}
+}
+
+@article{abramsky2011sheaf,
+  author  = {Samson Abramsky and Adam Brandenburger},
+  title   = {The Sheaf-Theoretic Structure of Non-Locality and Contextuality},
+  journal = {New Journal of Physics},
+  year    = {2011},
+  volume  = {13},
+  number  = {11},
+  pages   = {113036},
+  doi     = {10.1088/1367-2630/13/11/113036}
 }
 
 @book{spivak2014category,
@@ -508,4 +540,85 @@
   title  = {{Blazegraph} Documentation},
   year   = {2024},
   url    = {https://blazegraph.com/docs/}
+}
+
+% --- Added 2026-08-16: entries cited in paper/bibliography.bib but
+% missing here (see research_methodology.md's sync requirement) ---
+
+@inproceedings{carroll2005named,
+  author    = {Jeremy J. Carroll and Christian Bizer and Pat Hayes and Patrick Stickler},
+  title     = {Named Graphs, Provenance and Trust},
+  booktitle = {Proceedings of the 14th International Conference on World Wide Web (WWW)},
+  year      = {2005},
+  pages     = {613--622},
+  publisher = {ACM}
+}
+
+@inproceedings{hartig2017rdfstar,
+  author    = {Olaf Hartig},
+  title     = {Foundations of {RDF*} and {SPARQL*}: An Alternative Approach
+               to Statement-Level Metadata in {RDF}},
+  booktitle = {Proceedings of the 11th Alberto Mendelzon International
+               Workshop on Foundations of Data Management and the Web (AMW)},
+  year      = {2017}
+}
+
+@techreport{w3c2021rdfstar,
+  author      = {Olaf Hartig and Pierre-Antoine Champin and Gregg Kellogg
+                 and Andy Seaborne},
+  title       = {{RDF-star} and {SPARQL-star}},
+  institution = {World Wide Web Consortium},
+  year        = {2021},
+  type        = {{W3C} Final Community Group Report},
+  url         = {https://www.w3.org/2021/12/rdf-star.html}
+}
+
+@techreport{noy2006nary,
+  author      = {Natasha Noy and Alan Rector},
+  title       = {Defining N-ary Relations on the Semantic Web},
+  institution = {World Wide Web Consortium},
+  year        = {2006},
+  type        = {{W3C} Working Group Note},
+  url         = {https://www.w3.org/TR/swbp-n-aryRelations/}
+}
+
+@inproceedings{nguyen2014singleton,
+  author    = {Vinh Nguyen and Olivier Bodenreider and Amit Sheth},
+  title     = {Don't Like {RDF} Reification? Making Statements about
+               Statements Using Singleton Property},
+  booktitle = {Proceedings of the 23rd International Conference on World
+               Wide Web (WWW)},
+  year      = {2014},
+  pages     = {759--770},
+  publisher = {ACM}
+}
+
+@inproceedings{aluc2014watdiv,
+  author    = {G{\"u}ne{\c{s}} Alu{\c{c}} and Olaf Hartig and M. Tamer
+               {\"O}zsu and Khuzaima Daudjee},
+  title     = {Diversified Stress Testing of {RDF} Data Management Systems},
+  booktitle = {Proceedings of the 13th International Semantic Web
+               Conference (ISWC)},
+  year      = {2014},
+  pages     = {197--212},
+  publisher = {Springer}
+}
+
+@article{rota1964moebius,
+  author  = {Gian-Carlo Rota},
+  title   = {On the Foundations of Combinatorial Theory {I}. Theory of
+             {M}{\"o}bius Functions},
+  journal = {Zeitschrift f{\"u}r Wahrscheinlichkeitstheorie und Verwandte
+             Gebiete},
+  year    = {1964},
+  volume  = {2},
+  number  = {4},
+  pages   = {340--368}
+}
+
+@misc{rdflib,
+  author = {{RDFLib Team}},
+  title  = {{rdflib}: A Python library for working with {RDF}},
+  year   = {2024},
+  url    = {https://github.com/RDFLib/rdflib}
 }

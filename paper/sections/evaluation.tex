@@ -1,10 +1,11 @@
 \section{Evaluation}
 \label{sec:evaluation}
 
-We evaluate the two engines on the same fact streams, the same query set,
-and the same verification harness. Every benchmark result reported below has
-passed cross-engine semantic equivalence checking
-(Section~\ref{sec:correctness}); rows for which the two engines produced
+We evaluate three engines --- the KG baseline, the KG-mem storage-layer
+control, and SFDB --- on the same fact streams, the same query set, and
+the same verification harness. Every benchmark result reported below has
+passed three-way cross-engine semantic equivalence checking
+(Section~\ref{sec:correctness}); rows for which any two engines produced
 divergent canonical result sets would be flagged and excluded, and no such
 divergence occurred in the runs reported here
 (Section~\ref{sec:eval:verification}).
@@ -14,14 +15,16 @@ divergence occurred in the runs reported here
 
 The measurements were taken on a single Windows~11 machine with an
 \texttt{\showcpu}\ processor, \texttt{\showmemory}\ of memory, and Python
-$3.14$. Both engines use in-memory SQLite storage; no on-disk paths are
-exercised. Each latency figure is the arithmetic mean of ten timed runs
+$3.14$. Each latency figure is the arithmetic mean of ten timed runs
 following two warm-up iterations, all on the same fact stream and
-query set. The dataset generator is seeded (default seed $42$) so that the
+query set, and every latency table reports the $95\%$ confidence
+half-width alongside each mean. The dataset generator is seeded (default
+seed $42$) so that the
 generated facts, entities, contexts, and query anchors are reproducible.
 Configuration, git commit, and \texttt{uv.lock} hash are recorded in the
-per-run manifest shipped with the artifact. Every number in this section is
-generated directly from a benchmark run by
+per-run manifest shipped with the artifact. Every number in this section
+--- including the headline ranges quoted in the abstract and
+introduction --- is generated directly from a benchmark run by
 \texttt{scripts/generate\_tables.py}; none is hand-transcribed
 (Section~\ref{sec:artifact:reproducibility}).
 
@@ -29,11 +32,27 @@ The dataset generator produces synthetic facts of arity in the range
 $3$--$8$ with a controlled context depth, an entity distribution drawn
 from a Zipf-like law ($\alpha = 1.2$) that mirrors the degree skew typical
 of real knowledge graph data, and a temporal validity envelope on $40\%$ of
-facts. We report results at three scales: $100$, $1\,000$, and $10\,000$
-facts. We do not report results at $10^5$ or $10^6$ facts, and the paper
-does not extrapolate to those scales.
+facts. We report results at \benchscalecount{} scales: \benchscales{}
+facts. At the largest scale the KG representation holds roughly $1.5$
+million reified triples. We do not report results at $10^6$ facts, and
+the paper does not extrapolate to that scale.
 
-We classify queries into four families whose performance profiles are
+The three engines are configured as follows. The \emph{KG baseline}
+persists dictionary-encoded reified triples to in-memory SQLite and
+answers queries through SQLite (Section~\ref{sec:arch:kg}). The
+\emph{KG-mem control} runs the identical reification and query logic with
+the SQLite dictionary tables and triple indexes replaced by Python dicts;
+it exists to separate the effect of context-indexed storage from the
+effect of answering queries without SQLite round trips
+(Section~\ref{sec:eval:control}). \emph{SFDB} stores each fact atomically
+and answers queries from its in-process stalk, neighbourhood, context,
+and temporal indexes, writing through to SQLite on insert only. One
+consequence is stated up front: KG-mem performs no write-through
+persistence, so its \emph{insert} latencies are not comparable to the two
+write-through engines and are reported for completeness only; KG-mem is a
+query-path control.
+
+We classify queries into five families whose performance profiles are
 fundamentally different:
 
 \begin{description}
@@ -41,77 +60,82 @@ fundamentally different:
           match). These are the queries for which stalk indexing is designed.
     \item[GLOBAL:] full-scan queries with no context or entity anchor.
           These force the engine to touch every stored fact.
+    \item[CONTEXT:] retrieve every fact stated at a given context or any of
+          its descendants in the context poset --- the query shape the
+          context-indexed design is named for, and the one the paper's own
+          motivating example describes (``every fact that holds in the
+          \texttt{clinical.adult} context''). The anchor context used here,
+          \texttt{ctx.0}, covers roughly $45\%$ of the generated facts at
+          every scale, a genuine sub-tree rather than a single leaf or the
+          whole graph.
     \item[TEMPORAL (bounded):] range queries over the temporal envelope of a
           fact, bounded on both ends (a one-year window in the dataset's
-          temporal span). Both engines rely on an auxiliary interval index
-          for these.
+          temporal span). SFDB narrows these via its year-bucketed
+          temporal index; the KG variants have no temporal index and
+          always scan and filter reconstructed facts
+          (Section~\ref{sec:complexity}).
     \item[TEMPORAL (unbounded):] range queries with a start bound and no end
-          bound (``everything from year $X$ onward''). SFDB resolves these
-          against a second, flat, binary-searchable temporal index rather
-          than the year-bucketed one used for the bounded case;
+          bound (``everything from $2023$-$01$-$01$ onward''). SFDB resolves
+          these against a second, flat, binary-searchable temporal index
+          rather than the year-bucketed one used for the bounded case;
           Section~\ref{sec:discussion:temporal-unbounded} describes why the
-          bucketed index alone cannot answer this case and how the flat
-          index fixes it.
+          bucketed index alone cannot answer this case. An earlier
+          revision of the suite passed a bare year here and was silently
+          re-bounded to a single-year window by a shared parsing
+          shorthand; Section~\ref{sec:discussion:threats} records that
+          bug, and a regression test now pins this query to a genuinely
+          open end.
 \end{description}
-
-The remainder of this section reports results by family. Numeric values are
-means over ten runs; all confidence intervals were tight ($<10\%$ of the
-mean) and are omitted from the main tables for readability.
 
 \subsection{Insert Throughput}
 \label{sec:eval:insert}
 
-SFDB is faster on insert throughput at every scale measured, though the
-margin is small at the smallest scale. SFDB stores the fact atomically as
+SFDB's insert throughput relative to the KG baseline does not hold a
+single direction across scales (Table~\ref{tab:insert}): at $100$ facts
+KG is faster ($8.24$\,ms vs.\ SFDB's $10.09$\,ms, a $1.22\times$ margin),
+while at $1\,000$, $10\,000$, and $100\,000$ facts SFDB is faster by
+$1.3$--$1.5\times$. We report the crossover rather than average over it:
+SFDB stores the fact atomically as
 a single section, while the KG engine must decompose the fact into $k + 4$
-triples and update three indexes per triple.
+triples and update three indexes per triple; both write through to
+SQLite. At the smallest scale the fixed per-insert cost of registering a
+fact into eight to ten open sets (Section~\ref{sec:eval:memory}) is not
+yet amortised against that per-triple decomposition cost, and the two
+engines' $95\%$ confidence intervals overlap narrowly rather than
+separating cleanly, so we do not read the $100$-fact point as a strong
+claim in either direction --- only as evidence that SFDB's insert
+advantage is not unconditional. KG-mem, which skips persistence entirely, is faster than both ---
+included in Table~\ref{tab:insert} for completeness, not comparison.
 
 \input{tables/insert_latency.tex}
 
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=0.6\textwidth]{figures/throughput.pdf}
-\caption{Insert throughput (ratio annotated above each bar): SFDB is
-faster at every scale.}
+\caption{Insert latency (SFDB/KG ratio annotated). KG-mem performs no
+write-through persistence and is shown for completeness only.}
 \label{fig:throughput}
 \end{figure}
-
-Both engines scale linearly with dataset size. SFDB's advantage is
-narrowest at $100$ facts ($1.05\times$, near parity --- absolute latencies
-here are a few milliseconds, small enough that per-run scheduling and
-allocator noise plausibly dominates) and widens to $1.36\times$ at
-$10\,000$ facts, consistent with the amortised cost of avoiding
-reification becoming a larger share of the total once fixed per-run
-overhead stops dominating.
 
 \subsection{Query Performance by Class}
 \label{sec:eval:query}
 
-The most informative measurements are the query latencies. Table
-\ref{tab:query} reports LOOKUP, GLOBAL, bounded TEMPORAL, and unbounded
-TEMPORAL means at all three scales.
+Table~\ref{tab:query} reports LOOKUP, GLOBAL, CONTEXT, bounded TEMPORAL, and
+unbounded TEMPORAL means with $95\%$ confidence half-widths at every
+scale, for all three engines, with SFDB's ratio against both KG variants.
 
 \input{tables/query_latency.tex}
 
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=\textwidth]{figures/latency.pdf}
-\caption{Query latency across scales, log axis. SFDB is faster than the KG
-baseline on every query class at every scale.}
+\caption{Query latency across scales, log axis, all three engines.}
 \label{fig:latency}
 \end{figure}
 
-SFDB is faster than the KG baseline on all four query classes at all three
-scales. On LOOKUP, the gap is not monotonic in scale: SFDB's advantage is
-$23\times$ at $100$ facts, peaks at $32\times$ at $1\,000$, and settles at
-$30\times$ at $10\,000$; we do not have a confirmed explanation for the
-peak near $1\,000$ facts and flag it as an open question rather than fit a
-story to it after the fact. GLOBAL does not share this non-monotonicity:
-the advantage grows from $44\times$ at $100$ facts to $92\times$ at
-$1\,000$ and $95\times$ at $10\,000$, roughly tracking the growing cost of
-the KG engine's table scan. Across all three scales the range is
-$23$--$32\times$ for LOOKUP and $44$--$95\times$ for GLOBAL. On LOOKUP,
-SFDB is faster because the stalk index returns a
+Against the KG baseline, SFDB is \rangelookupkg{} faster on LOOKUP
+and \rangeglobalkg{} faster on GLOBAL. On
+LOOKUP, SFDB is faster because the stalk index returns a
 complete fact for the anchor entity in a single hash lookup, while the KG
 engine must locate every triple that mentions the entity through its POS
 index, gather them by event identifier, and reassemble the fact through
@@ -119,60 +143,581 @@ joins. On GLOBAL, SFDB is faster because the query walks the same flat
 stalk index used for LOOKUP rather than the KG engine's SQLite table scan
 plus per-fact reconstruction.
 
-On bounded TEMPORAL, the advantage is smaller, $1.2$--$1.4\times$, because
-both engines pay a comparable cost: KG reconstructs each candidate fact's
-temporal bounds from reified triples and filters in Python, while SFDB
-narrows to the year buckets the range spans via its year-bucketed temporal
-index and then filters the (larger) candidate set the same way. On
-unbounded TEMPORAL, SFDB is faster by $1.1$--$1.2\times$ via a second,
-flat, binary-searchable index maintained specifically for ranges open on
-one end; this used to be a negative result for SFDB before that index
-existed, and Section~\ref{sec:discussion:temporal-unbounded} discusses the
-history. On both TEMPORAL variants, the margin is smaller than LOOKUP or
-GLOBAL because both engines still do comparable per-candidate filtering
-work once the candidate set is identified.
+On CONTEXT, SFDB is \rangecontextkg{} faster than the KG baseline: every
+fact is registered, at insert time, into the open set of its own context
+and every ancestor context's open set (Section~\ref{sec:arch:sheaf}), so
+the open set named for the query's anchor context already holds the full
+sub-tree union before the query runs and the query is a single lookup
+into it, while KG evaluates an exact-match-or-prefix
+filter over its context-indexed triple table and still pays reified-triple
+reconstruction per matching fact. This is the query shape the context
+poset exists to answer, and it is measured here for the first time in
+this evaluation's history --- an earlier revision of this paper reported
+LOOKUP, GLOBAL, and TEMPORAL numbers without ever benchmarking the one
+query class its own title names.
+
+On the TEMPORAL classes the picture against the KG baseline is
+narrower --- \rangetemporalkg{} on bounded ranges and
+\rangetemporalunbkg{} on unbounded ranges --- because both engines do
+comparable per-candidate interval filtering once the candidate set is
+identified; SFDB's advantage here is in narrowing the candidate set
+(year buckets for the bounded case, a binary search into the flat
+start/end index for the unbounded case) rather than in reconstruction.
+Section~\ref{sec:eval:control} shows how much of each advantage is
+attributable to the storage layer rather than to context-indexed
+storage itself.
 
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=0.6\textwidth]{figures/speedup.pdf}
-\caption{SFDB/KG latency ratio by query class; all bars below the parity
-line mean SFDB is faster.}
+\caption{SFDB/KG latency ratio by query class; below the parity
+line means SFDB is faster.}
 \label{fig:speedup}
 \end{figure}
+
+\subsection{The KG-mem Storage-Layer Control}
+\label{sec:eval:control}
+
+The comparison between SFDB and the KG baseline conflates two variables:
+SFDB both stores facts atomically under a context poset \emph{and}
+answers queries from in-process dict indexes, while the KG baseline both
+reifies facts \emph{and} answers queries through SQLite. The KG-mem
+control isolates the second variable: it reifies and reconstructs
+exactly as the KG baseline does, but its dictionary tables and triple
+indexes are Python dicts, so the SFDB-vs-KG-mem ratio measures what
+context-indexed atomic storage buys once the storage-layer difference is
+removed.
+
+The result decomposes the headline speedups cleanly. On LOOKUP, SFDB
+remains \rangelookupkgmem{} faster than KG-mem: most of the LOOKUP
+advantage is attributable to avoiding reification --- returning a stored
+fact instead of reassembling it from triples --- not to avoiding SQLite.
+On GLOBAL the same holds at \rangeglobalkgmem{}. On CONTEXT, the ratio
+against KG-mem is \rangecontextkgmem{}: both engines resolve the query in
+time proportional to the result size, not to $N$, so this is not an
+asymptotic gap but a constant-factor one --- SFDB's context-to-open-set
+index resolves the anchor context to a single pre-populated open set
+(every fact is registered into its own context's open set and every
+ancestor's, at insert time, so the sub-tree union already exists before
+the query runs), while KG-mem enumerates the handful of distinct context
+buckets under the anchor and unions their fact-id sets. This is why
+CONTEXT, unlike LOOKUP and GLOBAL, is a genuine test of whether that
+constant factor is large enough to matter, rather than a foregone
+conclusion.
+On the TEMPORAL
+classes, by contrast, the picture reverses at most scales rather than
+merely narrowing. On bounded TEMPORAL, SFDB is slower than KG-mem at
+three of the four scales measured ($100$, $10\,000$, and $100\,000$
+facts) and marginally faster only at $1\,000$
+(\rangetemporalkgmem{} across the full range, which straddles parity
+rather than sitting above it); on unbounded TEMPORAL the pattern is
+mixed, slower at the smallest scale and faster or near parity at the
+three larger ones (\rangetemporalunbkgmem{}). The TEMPORAL
+advantages over the SQLite-backed baseline reported earlier in this
+section are therefore not evidence of a context-indexed design win at
+all: they are storage-layer effects that a dict-indexed reified store
+would recover just as well, and once that effect is controlled for,
+context-indexed storage shows no consistent advantage on either
+TEMPORAL class --- if anything a mild disadvantage on the bounded one.
+We report this as a negative result rather than reframe it, consistent
+with the paper's house style (Section~\ref{sec:discussion:negative}).
+The honest summary is that context-indexed
+storage pays for retrieval shaped like ``give me whole facts'' or ``give
+me this context's sub-tree,'' and does not
+meaningfully pay for range scans whose cost is dominated by
+per-candidate filtering both designs share.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{figures/control.pdf}
+\caption{Storage-adjusted speedup: SFDB/KG-mem latency ratio by query
+class. Below the parity line means SFDB is faster than the dict-indexed
+control.}
+\label{fig:control}
+\end{figure}
+
+\subsection{External Reference Point: rdflib}
+\label{sec:eval:rdflib}
+
+Every comparison above is against engines we wrote ourselves. As an
+external check, we run all five query classes against
+rdflib~\cite{rdflib} --- a real, independent, pure-Python in-memory RDF
+library --- at $100$, $1\,000$, and $10\,000$ facts, driven through
+SPARQL text with the same overlap semantics the typed queries implement,
+and with result counts checked against SFDB on every class at every
+scale (Table~\ref{tab:rdflib}). The scope of this comparison is stated
+plainly: rdflib is not a disk-backed production triple store, its
+latencies include SPARQL parsing on every run (which is how the library
+is normally driven), and we cap it at $10^4$ facts because its SPARQL
+engine does not sustain the scan-shaped classes at $10^5$ in reasonable
+benchmark time. It is an independent implementation by other authors,
+which the in-house baselines are not, and every reported row returned
+identical result counts to SFDB.
+
+\input{tables/rdflib_reference.tex}
+
+\subsection{External Reference Point: Apache Jena TDB2}
+\label{sec:eval:jena}
+
+rdflib is a genuine external implementation, but it is an in-memory,
+pure-Python library --- not what a systems reviewer means by a
+production RDF store. We additionally ran all five query classes
+against a real Apache Jena TDB2 store (v6.2.0), a disk-backed,
+independently engineered triple store with its own B+tree indexing and
+query optimiser, accessed exactly as an external client would: over
+HTTP, via the standard SPARQL~1.1 protocol, through a Fuseki server. The
+identical fact stream, identical reification predicates, and identical
+SPARQL query text used for the rdflib comparison were reused so the two
+external comparisons are directly comparable to each other and to SFDB
+(Table~\ref{tab:jena}). Every row returned an identical result count to
+SFDB.
+
+\input{tables/jena_reference.tex}
+
+The result is more informative than either a clean win or a clean loss.
+On LOOKUP, GLOBAL, and CONTEXT, SFDB remains faster than Jena at every
+scale
+measured: the ratio (jena\,/\,SFDB mean latency; above $1$ means SFDB is
+faster) ranges \rangelookupjena{} on LOOKUP, \rangeglobaljena{} on
+GLOBAL, and \rangecontextjena{} on CONTEXT across all scales, settling at \lookupjenalarge{},
+\globaljenalarge{}, and \contextjenalarge{} at the largest scale, \jenalargescale{} facts ---
+notable given that Jena's reported latency includes an HTTP round trip
+SFDB's in-process call does not pay, which if anything understates
+SFDB's advantage on these three classes rather than inflating it. On
+TEMPORAL, the picture reverses as scale grows: SFDB is
+faster at $100$ and $1\,000$ facts, but Jena is faster from $10\,000$
+facts onward, with the same ratio falling to
+\temporaljenalarge{} (bounded TEMPORAL) and
+\temporalunbjenalarge{} (unbounded TEMPORAL) at \jenalargescale{} facts
+--- a ratio below $1$ here means Jena is faster, by a factor of roughly
+seven at this scale --- despite paying the same HTTP overhead
+that works against it on the other three classes. This is not the storage-layer effect
+Section~\ref{sec:eval:control} identified for TEMPORAL
+against KG-mem: Jena is disk-backed, HTTP-mediated, and not a Python
+dict, so its query engine is winning on its own merits --- most likely a
+mature cost-based optimiser and compiled index structures overtaking
+SFDB's Python-level candidate filtering once the candidate sets reach
+tens of thousands of rows. We report this as a genuine, scale-dependent crossover
+rather than smoothing it into either "SFDB wins" or "SFDB loses": the
+architecture's advantage is real, robust, and now holds on three of the
+four query classes measured, and a mature production engine is a real
+competitor on the fourth once the working set is large enough for
+its optimiser to matter.
+
+\emph{A retraction.} An earlier revision of this section reported an
+eighth methodological finding here: that SFDB's own CONTEXT latency at
+$100\,000$ facts showed $\sim\!45\%$ run-to-run variance ($712$\,ms
+versus $1\,044$\,ms versus $989$\,ms across three independent process
+launches) attributed to unspecified process-level state. That finding
+is retracted, not merely superseded: those absolute numbers no longer
+reproduce at all, because they were measurements of the bug fixed and
+described in the next finding (finding ten, Section~\ref{sec:eval:lubm}) ---
+CONTEXT queries at that scale now take
+\contextjenalarge{}-scale-relative fractions of a millisecond, not
+hundreds of them. We do not know whether the specific $\sim\!45\%$
+swing was itself a symptom of the same bug or a genuine, separate
+process-level effect riding on top of an already-inflated baseline;
+distinguishing those would require re-instrumenting a code path that no
+longer exists in its old form, which we have not done. We record the
+retraction here, in the section that originally reported the now-wrong
+finding, rather than silently drop it, on the same principle the rest
+of this paper's self-correction record is built on.
+
+\subsection{External Reference Point: OpenLink Virtuoso}
+\label{sec:eval:virtuoso}
+
+A single external comparison leaves open whether a reported crossover is
+a property of mature production RDF engines generally or an artefact of
+one vendor's specific optimiser. We therefore repeated the identical
+methodology against a second, independently engineered production
+store: OpenLink Virtuoso (open-source edition, v7.20.3243), a
+disk-backed C store with its own cost-based SQL/SPARQL optimiser,
+unrelated to Jena's Java B+tree implementation and written by a
+different organisation. As with Jena, Virtuoso is accessed exactly as an
+external client would, over the standard SPARQL~1.1 protocol: HTTP
+Digest-authenticated SPARQL Update for inserts and plain SPARQL Query
+for reads. Virtuoso requires every inserted triple to name an explicit
+graph (Jena does not), so facts are inserted into one named graph;
+reads use the identical, unmodified query text shared with the rdflib
+and Jena comparisons by passing Virtuoso's \texttt{default-graph-uri}
+HTTP parameter rather than rewriting the query. All five query classes
+were run at all four paper scales, with every row returning an
+identical result count to SFDB (Table~\ref{tab:virtuoso}).
+
+\input{tables/virtuoso_reference.tex}
+
+The result reproduces the Jena finding independently, in both direction
+and approximate scale threshold. On LOOKUP, GLOBAL, and CONTEXT, SFDB remains
+faster than Virtuoso at every scale measured: the ratio
+(virtuoso\,/\,SFDB mean latency; above $1$ means SFDB is faster) ranges
+\rangelookupvirtuoso{} on LOOKUP, \rangeglobalvirtuoso{} on GLOBAL, and
+\rangecontextvirtuoso{} on CONTEXT
+across all scales, settling at \lookupvirtuosolarge{},
+\globalvirtuosolarge{}, and \contextvirtuosolarge{} at \jenalargescale{} facts --- again despite
+Virtuoso's reported latency including an HTTP round trip and
+Digest-authentication overhead SFDB's in-process call does not pay. On
+TEMPORAL, the same reversal appears at the same scale
+threshold as Jena: SFDB is faster at $100$ and $1\,000$ facts, but
+Virtuoso is faster from $10\,000$ facts onward, with the ratio falling to
+\temporalvirtuosolarge{} (bounded
+TEMPORAL) and \temporalunbvirtuosolarge{} (unbounded TEMPORAL) at
+\jenalargescale{} facts --- Virtuoso faster by a factor of roughly six
+to nine at this scale, close to Jena's margin on the same class.
+
+That two independently engineered production optimisers, from different
+organisations, in different implementation languages, reverse the same
+comparison on the same query class at the same scale threshold is
+stronger evidence than either comparison alone that the crossover is a
+property of what mature cost-based query optimisers do once candidate
+sets reach tens of thousands of rows, not a Jena-specific quirk. It does
+not settle the question --- two data points are not a general law --- but it moves the
+open question posed after the Jena result (Section~\ref{sec:future:jena})
+from "does this generalise beyond one vendor" to "does this generalise
+beyond two"; Section~\ref{sec:eval:graphdb}, next, pushes it to three.
+
+Building this comparison surfaced a ninth methodological finding,
+recorded in full in Section~\ref{sec:discussion:threats}: the SPARQL
+query text shared across all three external comparisons contains a
+FILTER that compares two RDF literals with \texttt{<} or \texttt{>}
+(the TEMPORAL classes' range bounds). Against untyped literals, Virtuoso
+silently returned every row unfiltered rather than applying a
+spec-consistent comparison, while the identical query text against Jena
+and rdflib correctly filtered and agreed with SFDB. We fixed this once,
+in the shared query text used by all three comparisons, by wrapping the
+compared variable in \texttt{STR(...)} to force an unambiguous string
+comparison; all three comparisons --- including Jena and rdflib, which
+were not broken --- were re-verified to still agree with SFDB after the
+change. Unlike the other eight findings, this one is not a bug in code
+this project controls: it is evidence that reusing identical query text
+across engines, while a necessary discipline for a fair comparison, is
+not sufficient on its own when the engines being compared disagree about
+SPARQL's own semantics at the margins.
+
+\subsection{External Reference Point: Ontotext GraphDB}
+\label{sec:eval:graphdb}
+
+Two independent confirmations narrow the ``is this Jena-specific''
+question considerably, but two data points do not establish a general
+law. We ran the identical methodology a third time against Ontotext
+GraphDB (free edition, v10.7.3), a disk-backed Java store with its own
+RDF4J-based storage layer and query optimiser, independently engineered
+from both Jena and Virtuoso. GraphDB needs neither authentication nor an
+explicit named graph for inserts --- closer in that respect to Jena than
+to Virtuoso --- and its plain (untyped) literal relational comparisons
+already behave correctly under the SPARQL~1.1 simple-literal ordering
+extension, unlike Virtuoso (Section~\ref{sec:eval:virtuoso}), so no
+engine-specific workaround was needed beyond the shared
+\texttt{STR(...)} coercion already applied uniformly across all three
+comparisons. All five query classes were run at all four paper scales,
+with every row returning an identical result count to SFDB
+(Table~\ref{tab:graphdb}).
+
+\input{tables/graphdb_reference.tex}
+
+The result is the same pattern a third time, at the same scale
+threshold. On LOOKUP, GLOBAL, and CONTEXT, SFDB remains faster than GraphDB at
+every scale: the ratio (graphdb\,/\,SFDB mean latency; above $1$ means
+SFDB is faster) ranges \rangelookupgraphdb{} on LOOKUP,
+\rangeglobalgraphdb{} on GLOBAL, and \rangecontextgraphdb{} on CONTEXT across all scales, settling at
+\lookupgraphdblarge{}, \globalgraphdblarge{}, and \contextgraphdblarge{} at \graphdblargescale{}
+facts. On TEMPORAL, GraphDB overtakes SFDB from $10\,000$
+facts onward --- the identical scale threshold as Jena and Virtuoso ---
+with the ratio falling to
+\temporalgraphdblarge{} (bounded TEMPORAL) and
+\temporalunbgraphdblarge{} (unbounded TEMPORAL) at \graphdblargescale{}
+facts, a roughly five-to-six-fold margin: smaller than Jena's and
+Virtuoso's margins on the same class, but the same direction, same
+class, same scale
+threshold.
+
+Three independently engineered production optimisers, from three
+different organisations, in three different implementation languages
+and storage architectures, all reverse the same comparison on the same
+query class at the same scale threshold. That is no longer weak
+evidence for a Jena-specific quirk; it is the pattern one would expect
+if the reversal is a property of what mature cost-based query
+optimisers generally do once candidate sets reach tens of thousands of
+rows, rather than a property of any one engine. We still stop short of
+calling this a general law --- three engines are not an exhaustive
+survey of production RDF stores --- but the question this paper's own future-work section posed after
+the first comparison (``is this Jena's optimiser or mature engines
+generally'') now has a much better-supported answer than it did after
+either the second comparison or the first. And it is narrower than the
+question originally posed: on the strength of three independent
+production engines, three of the paper's four query classes
+(LOOKUP, GLOBAL, CONTEXT) show no crossover of any kind at any scale
+measured, in-house baseline or production store; only TEMPORAL does.
+
+\subsection{Real-World Case Study: Wikidata Office-Holders}
+\label{sec:eval:wikidata}
+
+Every result so far uses this project's own synthetic generator
+(Section~\ref{sec:eval:setup}), parameterised by the same authors who
+built the engine it benchmarks. We additionally ran the identical five
+query classes and insert benchmark against \wikidatanumfacts{} genuine
+facts sourced from Wikidata's public SPARQL endpoint, not constructed to
+fit the design: every national head-of-state or head-of-government
+``position held'' statement (property P39) for $198$ distinct offices
+across $168$ countries that Wikidata records, together with the P580/P582
+start/end date qualifiers where present ($92.6\%$ and $89.0\%$ of facts,
+respectively). A single such fact --- who held office, in which
+position, in which country, from when to when --- is a genuine instance
+of the reification problem this paper opens with: it does not reduce to
+a subject-predicate-object triple without being split apart. The
+snapshot is cached (\texttt{data/wikidata\_case\_study\_raw.json}) and the
+benchmark never queries Wikidata live, so the result is reproducible
+independent of Wikidata's data changing after the snapshot was taken;
+\texttt{scripts/fetch\_wikidata\_case\_study.py}'s module docstring
+records exactly how the position sample was constructed, including two
+approaches that did not work (an unfiltered label regex hit a 504
+timeout against Wikidata's public endpoint; an unrandomised join was
+found to be dominated by a handful of anomalous position entities,
+returning as few as ten distinct positions in a thousand-row sample)
+before settling on a class-filtered label search followed by a
+country-name validation pass. This is the same three-in-house-engine
+comparison as the rest of this section (KnowledgeGraph, KnowledgeGraphMem,
+SheafDatabase), not a fourth external-engine comparison: Jena and
+Virtuoso were not re-run against this dataset.
+
+LOOKUP is anchored on Antonio L\'opez de Santa Anna (Q189145), the
+single person appearing in the most facts in the snapshot: eleven
+non-consecutive terms as President of Mexico between 1833 and 1855, a
+genuinely fragmented, repeated-office-holding pattern real history
+produces and a synthetic generator would not naturally construct.
+CONTEXT is anchored on Greece, the country with the most recorded facts
+($195$). TEMPORAL uses a bounded 1990--2010 window and an unbounded
+window from 2000 onward. Every query class returned an identical result
+count across all three engines (Table~\ref{tab:wikidata-case-study}).
+
+\input{tables/wikidata_case_study.tex}
+
+LOOKUP, GLOBAL, and CONTEXT reproduce the synthetic-data finding cleanly: SFDB is
+\wikidatalookupkg{} the KG baseline's latency and \wikidatalookupkgmem{}
+KG-mem's on LOOKUP, \wikidataglobalkg{} and \wikidataglobalkgmem{}
+on GLOBAL, and \wikidatacontextkg{} and \wikidatacontextkgmem{} on
+CONTEXT (ratio is engine\,/\,SFDB; below $1$ means SFDB
+is faster) --- SFDB remains faster than both baselines on all three of
+the query shapes that show a robust advantage everywhere else in this
+paper, on data it did not choose. Greece's $195$ facts are unevenly
+distributed across a genuinely deep, fragmented 19th- and 20th-century
+political history very unlike the synthetic generator's balanced context
+tree, and the CONTEXT margin survives that shift comfortably --- a
+useful confirmation, since an earlier revision of this evaluation
+measured Greece's CONTEXT query before finding ten
+(Section~\ref{sec:eval:lubm}) and reported the opposite result, SFDB
+\emph{losing} to KG-mem here; that reading no longer reproduces, for the
+same reason finding ten's other reported crossovers do not, and is
+retracted along with them.
+
+TEMPORAL alone does not reproduce the synthetic-data finding, and we
+report it as measured rather than smooth it into the cleaner three-class
+story above. SFDB beats \emph{both} baselines on this real dataset
+(\wikidatatemporalkg{} vs.\ KG, \wikidatatemporalkgmem{} vs.\ KG-mem,
+bounded; \wikidatatemporalunbkg{} and \wikidatatemporalunbkgmem{}
+unbounded) --- on the synthetic benchmark, the temporal advantage does
+not survive the KG-mem control at all
+(Section~\ref{sec:discussion:kg-wins}), and against the three external
+production stores it reverses outright from $10^4$ facts onward
+(Sections~\ref{sec:eval:jena}--\ref{sec:eval:graphdb}). We do not have a
+confirmed mechanism for why TEMPORAL performs comparatively well here;
+a plausible candidate is that Wikidata's
+real date distribution (concentrated in the 19th--21st centuries with a
+long earlier tail, rather than the synthetic generator's uniform span)
+produces temporal-bucket occupancy the index structures handle
+differently, but confirming that would require instrumenting the
+candidate-set sizes directly, which we have not done.
+
+We read this as the case study doing its job rather than failing to
+confirm the headline result: LOOKUP, GLOBAL, and CONTEXT's advantage is robust to
+a real, organically-shaped dataset the authors did not construct ---
+including surviving a topology shape (many facts concentrated under one
+country, embedded in a corpus otherwise unrelated to it) that turned out
+to be exactly the shape that exposed finding ten's bug when tried
+elsewhere at greater scale, in Section~\ref{sec:eval:lubm} --- while
+TEMPORAL remains genuinely data-shape-sensitive, in SFDB's favour here
+and against it elsewhere. A single case study on one domain at one scale
+is not proof that this generalises further; it is evidence that three
+of the four query classes stay robust and the fourth stays genuinely
+mixed, under exactly the kind of distributional shift
+Section~\ref{sec:discussion:threats}'s dataset-bias threat named as
+untested.
+
+\subsection{Standard Benchmark Workload: LUBM}
+\label{sec:eval:lubm}
+
+The synthetic generator (Section~\ref{sec:eval:setup}) builds a
+balanced context tree: fixed depth, fixed branching factor, the same
+shape at every scale. The Wikidata case study
+(Section~\ref{sec:eval:wikidata}) is organic but still, in its context
+structure, dominated by one populous country among a long tail of
+smaller ones. Neither tests a topology with \emph{many} large, mutually
+unrelated top-level siblings. LUBM (the Lehigh University Benchmark,
+\texttt{sfdb.datasets.lubm})
+does: at its largest scale here, $265$ independently generated
+universities, each its own top-level context with $2$--$5$ departments
+beneath it. We ran the identical five-class benchmark against LUBM data
+scaled by university count ($1$, $3$, $26$, $265$ universities, chosen
+to land close to this paper's usual four fact-count scales without
+forcing an exact match) --- the original loader carried no temporal
+data at all, so it has been extended with a one-semester envelope on
+\texttt{takesCourse} and \texttt{teacherOf} facts, additive metadata
+that does not change what LUBM's own standard Q1--Q14 query set would
+return. Every class returned an identical result count across
+KnowledgeGraph, KnowledgeGraphMem, and SheafDatabase at every scale
+(Table~\ref{tab:lubm}).
+
+\input{tables/lubm_benchmark.tex}
+
+The first run of this comparison surfaced a genuine bug, not a data-shape
+finding, and this is the tenth methodological finding recorded in
+Section~\ref{sec:discussion:threats}. CONTEXT is anchored on a single,
+fixed department ($68$ facts, every scale); its latency should therefore
+be flat as unrelated universities are added elsewhere, and
+Section~\ref{sec:eval:control}'s complexity claim already says exactly
+that --- \S\ref{sec:complexity} describes CONTEXT as a single $O(1)$
+open-set lookup followed by an $O(\text{result size})$ pass, independent
+of total corpus size. It was not flat. SFDB's CONTEXT latency at the
+smallest LUBM scale ($160$ facts) was $0.68$\,ms; at the largest
+($97\,289$ facts, the same $68$-fact result), it was $350$\,ms, a
+$515\times$ slowdown driven entirely by unrelated data. The root cause
+(\texttt{src/sfdb/sheaf/optimizer.py}, \texttt{\_classify\_semilocal}):
+CONTEXT query resolution found every fact whose \emph{exact} context
+matched the query and then unioned in \emph{every} open set each of
+those facts belonged to, including the ancestor open set named for
+\texttt{context:world} --- which every fact in the corpus belongs to,
+by construction, whenever the query context is not the root. The direct
+$O(1)$ lookup the architecture already supports (the open set literally
+named \texttt{context:<c>} already \emph{is} the pre-materialised
+sub-tree union, per \texttt{engine.\_assign\_open\_sets}) was never
+taken. Final results were always correct --- a downstream filter narrows
+the over-broad candidate set back down before it reaches the caller,
+which is exactly why cross-engine verification never caught it, and why
+the balanced synthetic generator never exposed it either: growing that
+generator's corpus also grows the query's own target subtree in
+lockstep, so the wasted work and the legitimate work scale together and
+look like the same line. LUBM's many-large-unrelated-siblings shape is
+what decouples them. The fix makes CONTEXT resolution target the
+\texttt{context:<c>} open set directly; \S\ref{sec:complexity}'s
+complexity claim did not need to change, the implementation needed to
+catch up to it. \texttt{tests/sheaf/test\_context\_query\_scope.py} pins
+the fix at the optimiser level (the wasted work was invisible in query
+\emph{results}, only in how much internal work produced them, so the
+regression test checks the classifier's target-open-set list directly,
+confirmed to fail against the pre-fix code and pass against the
+post-fix code).
+
+This is not a narrow fix. CONTEXT queries appear in every comparison
+this paper reports, and the bug had been present, at whatever severity
+each topology's shape happened to trigger, for the entire evaluation.
+Every CONTEXT number in this paper --- Table~\ref{tab:query},
+Table~\ref{tab:jena}, Table~\ref{tab:virtuoso}, Table~\ref{tab:graphdb},
+Table~\ref{tab:wikidata-case-study} --- was re-measured after the fix,
+not left as it stood; Section~\ref{sec:eval:jena}'s retraction of its
+own earlier ``methodological finding'' about CONTEXT measurement
+variance, and Section~\ref{sec:eval:wikidata}'s retraction of a
+CONTEXT-loses-to-KG-mem reading, are direct consequences. The corrected
+picture is, if anything, a stronger result for the design: SFDB now
+shows a robust advantage on three of five query classes
+(LOOKUP, GLOBAL, CONTEXT) rather than two, against every baseline and
+every external store this paper measures, and the crossover this paper
+built its central honesty narrative around narrows to TEMPORAL alone.
+We report the bug, the fix, and the corrected numbers together rather
+than quietly substituting the corrected numbers and leaving the
+narrative as though CONTEXT had always been this fast, because the
+finding that the evaluation's own topology diversity is what caught a
+real implementation gap is itself evidence for why the diversity effort
+(three synthetic-adjacent comparisons, three production stores, one
+organic dataset, one standard benchmark) was worth making.
+
+On the corrected numbers: LOOKUP, GLOBAL, and CONTEXT all show SFDB
+faster than both baselines at every scale, exactly as in every other
+comparison in this paper (\rangelookuplubmkg{} and
+\rangelookuplubmkgmem{} on LOOKUP; \rangeloballubmkg{} and
+\rangeglobalubmkgmem{} on GLOBAL; \rangecontextlubmkg{} and
+\rangecontextlubmkgmem{} on CONTEXT, settling at \contextlubmkglarge{}
+and \contextlubmkgmemlarge{} at \lubmlargescale{} facts). TEMPORAL is
+the one class that does not show a clean win here either: SFDB is
+roughly at parity with both baselines at the two largest scales
+(\temporallubmkglarge{} vs.\ KG, \temporallubmkgmemlarge{} vs.\ KG-mem
+at \lubmlargescale{} facts, bounded; \temporalunblubmkglarge{} and
+\temporalunblubmkgmemlarge{} unbounded), neither a clear win nor the
+sharp loss seen against KG-mem on the synthetic benchmark
+(Section~\ref{sec:eval:control}) or against the three production
+stores. A third dataset, a third shape, and TEMPORAL is the one class
+that keeps landing somewhere different every time --- which is itself
+consistent with the rest of this paper's account of TEMPORAL as the
+query shape genuinely most sensitive to a dataset's actual structure,
+rather than a settled win or loss in either direction.
+
+\subsubsection{LUBM Against External Stores: Varying Both Axes at Once}
+\label{sec:eval:lubm-external}
+
+Every other comparison in this paper varies exactly one of the two
+axes that could explain SFDB's advantage: either the dataset changes
+and the comparison engine stays this project's own KG/KG-mem baselines
+(the LUBM results above, the Wikidata case study), or the comparison
+engine changes and the dataset stays the synthetic generator
+(Sections~\ref{sec:eval:jena}--\ref{sec:eval:graphdb}). We ran the
+identical LUBM data and query set from this section against all three
+external stores as well, so that both axes vary at once: an organic,
+many-large-unrelated-siblings topology neither store's optimiser has
+seen before, measured through the same HTTP/SPARQL path already used
+for the synthetic-generator comparisons.
+
+\input{tables/lubm_jena_reference.tex}
+\input{tables/lubm_virtuoso_reference.tex}
+\input{tables/lubm_graphdb_reference.tex}
+
+The pattern reported for the synthetic generator holds exactly, against
+every store, at every scale, with every result count matching: SFDB
+faster on LOOKUP, GLOBAL, and CONTEXT
+(\rangelookuplubmjena{}/\rangelookuplubmvirtuoso{}/\rangelookuplubmgraphdb{}
+on LOOKUP; \rangegloballubmjena{}/\rangegloballubmvirtuoso{}/\rangegloballubmgraphdb{}
+on GLOBAL; \rangecontextlubmjena{}/\rangecontextlubmvirtuoso{}/\rangecontextlubmgraphdb{}
+on CONTEXT, settling at \contextlubmjenalarge{}, \contextlubmvirtuosolarge{},
+and \contextlubmgraphdblarge{} respectively at \lubmjenalargescale{} facts),
+and TEMPORAL crossing over to favour the external store at the largest
+scales (\rangetemporallubmjena{}/\rangetemporallubmvirtuoso{}/\rangetemporallubmgraphdb{}
+bounded; \rangetemporalunblubmjena{}/\rangetemporalunblubmvirtuoso{}/\rangetemporalunblubmgraphdb{}
+unbounded). This is the strongest robustness check this paper runs for
+its central crossover claim: the same three-classes-robust,
+one-class-crossover shape survives changing the dataset and the engine
+simultaneously, against three independently engineered production
+stores, rather than resting on either axis varying alone.
 
 \subsection{Memory}
 \label{sec:eval:memory}
 
 The latency results above are not free. Table~\ref{tab:memory} reports the
 resident memory delta from inserting $N$ facts into an empty engine,
-averaged over ten independent runs.
+averaged over ten independent runs, for all three engines.
 
 \input{tables/memory.tex}
 
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=0.6\textwidth]{figures/memory.pdf}
-\caption{Resident memory delta from inserting $N$ facts. SFDB uses
-$1.3$--$2.5\times$ more memory than the KG baseline at the two larger
-scales measured; see text for why the $100$-fact point is excluded.}
+\caption{Resident memory delta from inserting $N$ facts, all three
+engines. Ratios are computed only at scales where both deltas exceed
+the measurement floor; see text.}
 \label{fig:memory}
 \end{figure}
 
-SFDB uses $1.3$--$2.5\times$ more resident memory per fact than the KG
-baseline at $1\,000$ and $10\,000$ facts, where both deltas are large
-enough to measure reliably. At $100$ facts both deltas are under
-$0.03$\,MB total --- close enough to the measurement floor that the
-observed ratio (SFDB measuring \emph{lower} than KG at that scale) is
-noise, not signal, and we exclude it from the headline range rather than
-report a reversal the design offers no mechanism for. The cost has a
-direct structural explanation: the topology
+SFDB uses \rangememkg{} more resident memory per fact than the KG
+baseline, and \rangememkgmem{} more than the KG-mem control, over the
+scales at which both deltas are large enough to measure reliably
+($\geq 1$\,MB); at $100$ facts the deltas sit at the measurement floor
+and are excluded from the ranges rather than reported as signal. The
+cost has a direct structural explanation: the topology
 builder assigns each fact to roughly eight to ten open sets (event,
 subject and object entities, temporal bucket, context and its ancestors,
 and two provenance buckets), and the stalk, neighbourhood, context, and
 temporal indexes each hold their own reference to the fact. The KG
 baseline's SQLite-backed triple table is more compact per fact because
 reified triples share dictionary-encoded integer identifiers rather than
-holding live Python object references. This is the paper's central
+holding live Python object references; KG-mem gives some of that
+compactness back by holding its indexes in Python dicts, which is why
+SFDB's multiple against it is smaller. This is the paper's central
 tradeoff: SFDB spends memory on redundant indexing structure to buy the
 latency advantage reported above.
 
@@ -180,30 +725,32 @@ latency advantage reported above.
 \label{sec:eval:scalability}
 
 Figure~\ref{fig:scalability} plots latency against dataset size on log axes.
-Insert latency scales linearly for both engines. SFDB LOOKUP and GLOBAL
-both scale linearly in the number of facts, since both now resolve through
-the same flat, hash-indexed stalk table; the residual gap to KG is a
-constant factor set by the cost of a SQLite round trip and reified-triple
-reconstruction rather than a difference in asymptotic complexity. SFDB's
-unbounded TEMPORAL queries scale as $O(\log M + n)$ in the number of
-temporally-annotated facts $M$ (a binary search into the flat start/end
-index plus the candidate set $n$), rather than the $O(N)$ full-index scan
-the year-bucketed fallback would require; KG's TEMPORAL cost is $O(T)$
-regardless of whether the range is bounded, since it always scans and
-filters every reified temporal triple.
+Insert latency scales linearly for both write-through engines. SFDB LOOKUP
+and GLOBAL both scale linearly in the number of facts, since both resolve
+through the same flat, hash-indexed stalk table; the residual gap to KG is
+a constant factor set by the cost of SQLite round trips and
+reified-triple reconstruction rather than a difference in asymptotic
+complexity, and the gap to KG-mem is the reconstruction share alone.
+SFDB's unbounded TEMPORAL queries scale as $O(\log M + n)$ in the number
+of temporally-annotated facts $M$ (a binary search into the flat
+start/end index plus the candidate set $n$); KG's TEMPORAL cost is
+$O(T)$ regardless of whether the range is bounded, since it always scans
+and filters every reified temporal triple.
 
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=0.6\textwidth]{figures/scalability.pdf}
-\caption{Scalability: latency versus dataset size (log-log).}
+\caption{Scalability: latency versus dataset size (log-log), KG baseline
+and SFDB.}
 \label{fig:scalability}
 \end{figure}
 
 \subsection{Cross-Engine Verification}
 \label{sec:eval:verification}
 
-Every benchmark row above was accompanied by a semantic equivalence check.
-The check canonicalises both engines' result sets and compares them as
+Every benchmark row above was accompanied by a semantic equivalence check
+across all three engines.
+The check canonicalises each engine's result set and compares them as
 order-independent sets of canonical facts, so a reordering of otherwise
 identical results does not register as a divergence and a genuine content
 difference cannot hide behind row order. Over the full evaluation
@@ -214,43 +761,68 @@ Theorem~\ref{thm:equivalence}; the theorem is proved constructively in
 Section~\ref{sec:correctness}. It does, however, provide direct empirical
 corroboration on every query and input reported in this section, and it is
 the same harness that caught the LOOKUP semantics bug described in
-Section~\ref{sec:correctness}.
+Section~\ref{sec:correctness}. The rdflib comparison adds a
+result-count check against an implementation we did not write.
 
 \subsection{Summary}
 \label{sec:eval:summary}
 
-Five findings summarise the evaluation:
+Six findings summarise the evaluation:
 
 \begin{enumerate}
-    \item \textbf{Inserts are $1.05$--$1.36\times$ faster on SFDB at every
-          scale measured}, narrowest at $100$ facts where absolute
-          latencies are small enough that noise plausibly compresses the
-          gap, explained by the absence of reification overhead.
+    \item \textbf{Inserts do not favour SFDB unconditionally}: SFDB is
+          $1.2\times$ \emph{slower} than the write-through KG baseline
+          at the smallest scale ($100$ facts) and $1.3$--$1.5\times$
+          faster at every larger scale measured
+          (\rangeinsertkg{} across the full range). The reversal at
+          small $N$ is consistent with the fixed cost of registering a
+          fact into eight to ten open sets not yet being amortised.
+          (KG-mem inserts faster than both by
+          skipping persistence; that row is a control artefact, not a
+          finding.)
 
-    \item \textbf{LOOKUP queries are $23$--$32\times$ faster on SFDB}: the
-          stalk index resolves entity anchors in $O(1)$ hash lookups
-          against the KG baseline's $O(k)$ triple reconstruction.
+    \item \textbf{LOOKUP queries are \rangelookupkg{} faster on SFDB
+          than the KG baseline, and \rangelookupkgmem{} faster than the
+          KG-mem control}: the bulk of the advantage survives removal of
+          the storage-layer difference and is attributable to returning
+          stored facts instead of reassembling them from reified
+          triples.
 
-    \item \textbf{GLOBAL and bounded TEMPORAL queries are $44$--$95\times$
-          and $1.2$--$1.4\times$ faster on SFDB}, respectively, once the
-          query path uses the flat stalk and temporal indexes instead of
-          enumerating topology open sets one context at a time.
+    \item \textbf{GLOBAL queries are \rangeglobalkg{} faster than KG
+          and \rangeglobalkgmem{} faster than KG-mem}, for the same
+          reason: the flat stalk index yields whole facts; both KG
+          variants pay per-fact reconstruction.
 
-    \item \textbf{Unbounded TEMPORAL queries are $1.1$--$1.2\times$ faster
-          on SFDB}, via the same kind of flat index that fixed GLOBAL,
-          built specifically for ranges the year-bucketed index cannot
-          narrow (Section~\ref{sec:discussion:temporal-unbounded}).
+    \item \textbf{CONTEXT queries --- the class the context-indexed
+          design is named for, and the one no earlier revision of this
+          evaluation measured --- are \rangecontextkg{} faster than KG
+          and \rangecontextkgmem{} faster than KG-mem}: the anchor
+          context's sub-tree is pre-materialised as a single open set at
+          insert time, so the query resolves without a scan over the
+          context space.
 
-    \item \textbf{SFDB uses $1.3$--$2.5\times$ more resident memory per
-          fact at $1\,000$ and $10\,000$ facts}: the latency advantages
-          above are funded by keeping redundant per-open-set index
-          structure in memory rather than relying on SQLite joins at
-          query time.
+    \item \textbf{The TEMPORAL advantages over the SQLite baseline
+          (\rangetemporalkg{} bounded, \rangetemporalunbkg{} unbounded)
+          do not survive the control --- and on bounded TEMPORAL, SFDB is
+          slower than KG-mem at three of four scales}
+          (\rangetemporalkgmem{} bounded, \rangetemporalunbkgmem{}
+          unbounded, both straddling parity): these are storage-layer
+          effects, not wins for context-indexed
+          storage, and once controlled for there is no consistent
+          advantage left to report on either TEMPORAL class.
+
+    \item \textbf{SFDB uses \rangememkg{} more resident memory per fact
+          than KG, and \rangememkgmem{} more than KG-mem}: the latency
+          advantages above are funded by keeping redundant per-open-set
+          index structure in memory.
 \end{enumerate}
 
-We do not claim SFDB is universally superior to the KG baseline; the
-memory cost is real, reported plainly, and is the paper's one remaining
-tradeoff.
+We do not claim SFDB is universally superior; the memory cost is real,
+inserts are not uniformly faster, the temporal classes show no
+design-level advantage once the storage
+layer is controlled for and are mildly \emph{disadvantageous} on bounded
+TEMPORAL, and all of this is reported plainly rather than smoothed into a
+single directional headline.
 
 \subsection{Limitations of the Evaluation}
 \label{sec:eval:limitations}
@@ -258,5 +830,6 @@ tradeoff.
 The baseline and scale caveats that qualify every number above are
 collected in one place in Section~\ref{sec:limitations} and analysed in
 Section~\ref{sec:discussion:threats} rather than repeated here; in short,
-the KG baseline is our own research prototype rather than a production RDF
-store, and all measurements stop at $10^4$ facts.
+the KG baselines are our own research prototypes rather than production
+RDF stores, rdflib is the only externally-authored system measured, and
+all measurements stop at $10^5$ facts on a single node.

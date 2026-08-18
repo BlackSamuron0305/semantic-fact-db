@@ -14,10 +14,11 @@
    - Verify proofs through review simulation (see Quality Gates)
 
 3. **Implementation → SheafDB (sheaf path) + KG (baseline path)**
-   - Implement sheaf path: context lattice → sheaf construction → gluing → sheaf query engine
+   - Implement sheaf path: context poset → topology/open-set construction → gluing → sheaf query engine
    - Implement KG baseline: RDF store using the same fact representation
    - Both paths share: fact ingestion, canonical model, benchmark harness
-   - Located in `src/sheaf_db/` and `src/kg/`
+   - Located in `src/sfdb/sheaf/` and `src/sfdb/kg/` (**corrected 2026-08-16**;
+     was `src/sheaf_db/` and `src/kg/`, which do not exist)
 
 4. **Cross-engine verification → Canonical model, query equivalence**
    - Both engines process identical facts and queries

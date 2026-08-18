@@ -57,6 +57,19 @@ there exists a unique s ∈ F(c) with ρ_{c,cᵢ}(s) = sᵢ for all i.
 If s, t ∈ F(c) and ρ_{c,cᵢ}(s) = ρ_{c,cᵢ}(t) for all i in a cover of c,
 then s = t.
 
+**This holds vacuously here (added 2026-08-16).** On the Alexandrov
+topology this project uses, every point has a unique minimal open
+neighbourhood, so both axioms above are automatically satisfied and are
+not a non-trivial result about this system. The paper is explicit about
+this throughout — see `paper/sections/mathematical_model.tex`
+§"A Note on the Sheaf Condition" — and treats the sheaf terminology as
+borrowed operational vocabulary (restriction, stalks, global sections),
+not as a claimed sheaf-theoretic contribution. An earlier version of this
+note stated the condition without that caveat, which PLAN.md's Phase 0
+already flagged as a problem in the sibling draft
+`paper/drafts/sheaf_model.tex` (archived, never `\input` by the paper) —
+this file had the same gap and is corrected here for the same reason.
+
 ### Computational Implications
 
 1. **No decomposition**: N-ary facts are stored directly, eliminating

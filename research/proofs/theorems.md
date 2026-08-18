@@ -43,7 +43,16 @@ Reconstruction $R$ groups triples by statement ID, then inverts each step. Since
 
 This is exactly the statement that $F: \mathcal{C}^{\text{op}} \to \mathbf{Set}$ is a functor (a presheaf on $\mathcal{C}$).
 
-**Proof Sketch:** Property (1) holds because restricting from $c$ to $c$ leaves all object slots unchanged. Property (2) holds because restriction is defined pointwise: restricting from $e$ to $d$ then from $d$ to $c$ is equivalent to restricting directly from $e$ to $c$, as both apply the same sequence of slot operations.
+**Proof Sketch (corrected 2026-08-16 — see `restriction_maps.md` for why):**
+restriction is the identity on facts, defined on $f \in F(d)$ exactly when
+$\operatorname{context}(f) \le c$; it does not touch any field, so there
+are no "slot operations" for the two sides of either property to compare.
+Property (1) holds because $\operatorname{context}(f) \le c$ is trivially
+true when the target equals the source's own domain restricted to itself.
+Property (2) holds because both sides have the same domain,
+$\{f \in F(e) : \operatorname{context}(f) \le c\}$, and act as the
+identity on it: restricting from $e$ to $c$ directly, or via $d$, checks
+the same condition and returns the same unmodified $f$ either way.
 
 **References:** `research/proofs/restriction_maps.md`, `research/proofs/presheaf.md`.
 
@@ -103,7 +112,20 @@ This is exactly the statement that $F: \mathcal{C}^{\text{op}} \to \mathbf{Set}$
 
 ---
 
-## Theorem 6: Context Meet as Open Set Intersection
+## Theorem 6: Open-Set Intersections
+
+**Corrected 2026-08-16.** The original statement below (`U_{c_1} \cap U_{c_2}
+= U_{c_1 \wedge c_2}` unconditionally) is false as stated: in this poset,
+$c_1 \le c_2$ means $c_2$ is a prefix of $c_1$ (more specific = smaller),
+under which the meet of two *incomparable* contexts does not exist at all
+— no context can carry two distinct sibling paths as a prefix — while the
+longest common prefix of two incomparable contexts is their **join**, not
+their meet. The theorem holds only for comparable pairs; for incomparable
+pairs the intersection is simply empty. (This also means the corollary
+below is wrong as stated: $\{U_c\}$ is not closed under intersection in
+general, since $U_{c_1} \cap U_{c_2} = \emptyset$ is not itself of the
+form $U_c$ for any $c \in \mathcal{C}$ unless $\emptyset$ is admitted as
+such.)
 
 **Assumptions:**
 - Let $(\mathcal{C}, \leq)$ be the context poset with Alexandrov topology $\mathcal{T}_A$.
@@ -111,12 +133,25 @@ This is exactly the statement that $F: \mathcal{C}^{\text{op}} \to \mathbf{Set}$
 
 **Statement:** For any $c_1, c_2 \in \mathcal{C}$,
 \[
-U_{c_1} \cap U_{c_2} = U_{c_1 \wedge c_2}.
+U_{c_1} \cap U_{c_2} =
+\begin{cases}
+U_{c_1 \wedge c_2} & \text{if } c_1, c_2 \text{ are comparable}, \\
+\emptyset & \text{otherwise.}
+\end{cases}
 \]
 
-**Proof Sketch:** By definition, $d \in U_{c_1} \cap U_{c_2}$ iff $d \leq c_1$ and $d \leq c_2$. This is equivalent to $d \leq c_1 \wedge c_2$ (by definition of meet), which is exactly $d \in U_{c_1 \wedge c_2}$.
+**Proof Sketch:** $d \in U_{c_1} \cap U_{c_2}$ iff $d \leq c_1$ and $d \leq c_2$.
+If $c_1 \le c_2$ (WLOG), this reduces to $d \le c_1 = c_1 \wedge c_2$.
+If $c_1, c_2$ are incomparable, $d \le c_1$ and $d \le c_2$ would require
+both $c_1$ and $c_2$ to be prefixes of $d$'s path, which is impossible
+since the two paths disagree at their first differing segment — so no
+such $d$ exists.
 
-**Corollary:** The open sets $\{U_c\}_{c \in \mathcal{C}}$ form a basis for $\mathcal{T}_A$ that is closed under finite intersection.
+**Corollary:** The open sets $\{U_c\}_{c \in \mathcal{C}} \cup \{\emptyset\}$
+form a basis for $\mathcal{T}_A$ closed under finite intersection; the
+empty set must be included explicitly, since $\{U_c\}_{c \in \mathcal{C}}$
+alone is not closed under intersection (siblings intersect to $\emptyset$,
+which is not itself indexed by any single context).
 
 ---
 

@@ -25,34 +25,58 @@ Restriction maps must satisfy:
 
 ## Interpretation for SFDB
 
-In the SFDB model, a restriction map specialises a fact from a broader
-context to a narrower one.  Concretely, if a fact
+**Corrected 2026-08-16.** An earlier version of this note (and of the
+paper's own Definition of Restriction Map, since fixed) described
+restriction as rewriting a fact's context field and, for restrictions
+"that cross domain boundaries," dropping or specialising object slots.
+Neither claim matches what any restriction implementation in the
+codebase actually does. `sfdb.sheaf.presheaf.Presheaf.restrict` — the
+one the live query planner and the consistency checker actually
+call — is a **membership filter**: it returns each section from the
+broader open set *unchanged* (same fact object, same `open_set_name`)
+that also happens to be a member of the narrower open set, and
+otherwise excludes it. No field of the fact is read or rewritten, and
+the "same fact but with its context field changed" description above
+was simply wrong — the fact's context is fixed at insert time and
+restriction does not touch it.
+
+Concretely: for context $c_1 \le c_2$ (so $U_{c_1} \subseteq U_{c_2}$)
+and a fact $f \in F(c_2)$,
 
 \[
-f = (\text{id}, s, r, \vec{o}, \text{attrs}, c_2, \text{prov}, \text{conf}, \text{temp}, \text{meta})
+\rho_{c_2, c_1}(f) =
+\begin{cases}
+f & \text{if } \operatorname{context}(f) \le c_1 \text{ (i.e. } f \in U_{c_1}\text{)}, \\
+\text{undefined} & \text{otherwise.}
+\end{cases}
 \]
 
-is valid in $c_2$, then $\rho_{c_2, c_1}(f)$ is the same fact but with its
-context field changed to $c_1$.  For the root restriction (when $c_1$ is
-a direct refinement of $c_2$), no values are modified — the fact is simply
-re-contextualised.  For restrictions that cross domain boundaries, certain
-object slots may be dropped or specialised according to domain-specific
-rules.
+Restriction succeeds exactly when the fact was *already* valid at the
+narrower context — it is the identity on its (partial) domain, not a
+specialisation operation. This is the presheaf of "visibility from an
+open set," which is a legitimate and useful presheaf construction, just
+not the one the original text above described.
 
 Restriction maps are **deterministic**: given the same fact and target
-context, they always produce the same result.
+context, they always produce the same result (either $f$ itself, or
+undefined).
 
-## Examples
+## Example
 
-Given $c_2 = \text{world.2024}$ and $c_1 = \text{world.2024.physics}$:
+Given $c_2 = \text{world.2024}$ and $c_1 = \text{world.2024.physics}$, and
+a fact $f$ = SIGNED$(e, c, \text{contract-42}, \text{2024-03-15}, \dots)$
+whose own context is $\text{world.2024.physics}$ (i.e. $f \in U_{c_1}$
+already):
 
 \[
-\rho_{c_2, c_1}(\text{SIGNED}(e, c, \text{contract-42}, \text{2024-03-15}, \dots))
-= \text{SIGNED}(e, c, \text{contract-42}, \text{2024-03-15}, \dots)
+\rho_{c_2, c_1}(f) = f
 \]
 
-with context changed from world.2024 to world.2024.physics.  The fact
-continues to hold in the narrower domain.
+returned unchanged, because $f$ was already a member of the narrower
+open set. If instead $f$'s own context were $\text{world.2024.chemistry}$
+(a sibling of $c_1$, not $\le c_1$), $\rho_{c_2, c_1}(f)$ would be
+undefined — restriction is not a general specialisation operator, it can
+only "find" a fact in a narrower scope it was already visible from.
 
 ## References
 

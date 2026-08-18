@@ -16,10 +16,10 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass
-from typing import Any
+from datetime import UTC, datetime
 
 from common.schema import SemanticFact
-from common.types import Context, Identifier, Provenance, Value
+from common.types import Context, Identifier, Provenance, TemporalInfo, Value
 
 
 @dataclass
@@ -35,6 +35,18 @@ class LUBMConfig:
     num_universities: int = 1
     seed: int = 42
     context_depth: int = 3
+
+
+# Academic terms an enrollment or teaching assignment can fall in, spread
+# across ten real years so TEMPORAL queries have genuine range variety.
+# LUBM's own Q1-Q14 query set does not reference these dates -- they are
+# additive metadata on takesCourse/teacherOf facts (the two relations
+# with a natural real-world temporal envelope: a student takes a course,
+# or a professor teaches one, in a specific term), not a change to what
+# the standard LUBM queries return.
+_TERM_STARTS = [
+    (year, month) for year in range(2015, 2025) for month in (1, 9)
+]
 
 
 class LUBMGenerator:
@@ -97,6 +109,14 @@ class LUBMGenerator:
     def _context(self, *segments: str) -> Context:
         return Context(".".join(segments))
 
+    def _random_term(self) -> TemporalInfo:
+        """A random one-semester envelope from _TERM_STARTS."""
+        year, month = self._rng.choice(_TERM_STARTS)
+        start = datetime(year, month, 1, tzinfo=UTC)
+        end_year, end_month = (year, month + 4) if month == 1 else (year + 1, 1)
+        end = datetime(end_year, end_month, 1, tzinfo=UTC)
+        return TemporalInfo(start=start, end=end)
+
     def _add_fact(
         self,
         subject: Identifier,
@@ -104,6 +124,7 @@ class LUBMGenerator:
         objects: tuple[Value, ...],
         context: Context,
         attributes: dict[str, Value] | None = None,
+        temporal: TemporalInfo | None = None,
     ) -> None:
         fact = SemanticFact(
             id=self._next_id(),
@@ -113,6 +134,7 @@ class LUBMGenerator:
             attributes=attributes or {},
             context=context,
             provenance=Provenance(source="lubm_generator", method="synthetic"),
+            temporal=temporal,
         )
         self._facts.append(fact)
 
@@ -199,6 +221,7 @@ class LUBMGenerator:
                             self.PREDICATES["teacherOf"],
                             (Value.reference(course_entity),),
                             dept_ctx,
+                            temporal=self._random_term(),
                         )
 
                     # Publications
@@ -259,6 +282,7 @@ class LUBMGenerator:
                             self.PREDICATES["takesCourse"],
                             (Value.reference(course_entity),),
                             dept_ctx,
+                            temporal=self._random_term(),
                         )
 
                 # Undergraduate students

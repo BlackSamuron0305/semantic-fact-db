@@ -1,55 +1,69 @@
-Semantic knowledge is typically represented as collections of subject--predicate--object
-triples. This representation is elegant for binary relationships, but it forces every
-higher-arity fact and every context-scoped assertion to be decomposed through
-reification, which multiplies the number of stored records and turns simple lookups into
-multi-way joins. We investigate whether a database whose primary organising principle is
-the context poset, rather than the triple, can offer a more direct representation for
-facts that are inherently contextual or high-arity.
+Representing semantic knowledge as subject--predicate--object triples forces
+higher-arity and context-scoped facts through reification: one statement
+becomes many records, and answering a simple lookup becomes a multi-way
+join. We describe SFDB, a prototype database whose organising principle is
+instead the \emph{context poset}: each fact is stored atomically as a
+section over a finite poset of contexts, and entity- and context-anchored
+queries are
+answered through precomputed indexes rather than reconstruction. The formal
+vocabulary is that
+of presheaves on a finite Alexandrov space; the sheaf condition holds
+vacuously there, and we claim no category-theoretic novelty. A reified
+triple-store baseline is co-implemented over the same canonical schema, and
+every benchmark query is checked, online, for canonical result equivalence
+across engines --- a harness that caught a real semantic bug in our own
+engine before publication.
 
-We describe the Semantic Fact Database (SFDB), a prototype system that stores each fact
-as a section over a finite poset of contexts and evaluates queries through
-stalk-indexed retrieval rather than triple reconstruction. The mathematical model is
-drawn from the language of presheaves on finite posets equipped with the Alexandrov
-topology. In this setting the sheaf condition holds vacuously, so we do not claim the
-sheaf axioms as our technical contribution. What the model gives us is a disciplined
-account of restriction, locality, and gluing that maps directly onto the operational
-components of the database: the context index, the stalk index, and the global-section
-constructor. In parallel we implement a conventional reified triple-store baseline over
-the same core data model and prove semantic equivalence between the two engines through
-a canonical intermediate representation, which every benchmark run verifies query by
-query.
-
-The evaluation compares both engines on four query classes
-(LOOKUP, GLOBAL, bounded TEMPORAL, and unbounded TEMPORAL) plus insert throughput, at
-scales of 100, 1\,000, and 10\,000 facts, with every query at every scale checked for
-cross-engine result equivalence as part of the same run. SFDB is faster than the KG
-baseline on every measured dimension: inserts by $1.05$--$1.36\times$; entity-anchored
-LOOKUP queries by $23$--$32\times$, because the stalk index returns complete facts in a
-single hash lookup instead of reconstructing them from reified triples through joins;
-unrestricted full-scan (GLOBAL) queries by $44$--$95\times$, once the query path walks
-the same flat stalk index rather than enumerating topology open sets; bounded
-temporal-interval queries by $1.2$--$1.4\times$ via a year-bucketed index; and
-unbounded temporal-interval queries (open-ended ranges the bucketed index alone cannot
-narrow) by $1.1$--$1.2\times$ via a second, flat, binary-searchable temporal index built
-alongside it --- a case we originally reported as an open architectural gap and have
-since closed (Section~\ref{sec:discussion:temporal-unbounded}). This is not a
-uniformly favourable result: SFDB's in-memory indexing structure uses
-$1.3$--$2.5\times$ more resident memory per fact than the KG baseline's more compact
-reified-triple storage at the two larger scales measured, and we report this tradeoff
-plainly. We also report, as a direct consequence of tightening the cross-engine
-verification harness during this evaluation, that an earlier version of the sheaf
-engine silently answered entity-anchored LOOKUP queries with neighbourhood-style
-(any-mention) semantics rather than strict subject match; the stricter verification
-caught the discrepancy before publication, which we take as evidence for the value of
-the equivalence-checking methodology this paper describes, not merely for the numbers
-it produced.
-
-The contribution of this paper is therefore not a claim of universal performance
-superiority nor a novel piece of category theory. It is (i)~a workable design for a
-context-indexed semantic fact database backed by an implementation and full test suite,
-(ii)~a mechanised proof of semantic equivalence between the sheaf-inspired engine and a
-conventional triple store, enforced by an automated verification harness that we show
-catches real cross-engine semantic bugs, and (iii)~a careful benchmark that maps the
-design's latency advantages against its memory cost, including closing a genuine
-architectural gap (unbounded temporal ranges) once it was identified. All results are
-reproducible from the released artifact with a single command.
+Across \benchscalecount{} scales (\benchscales{} facts), SFDB answers
+LOOKUP queries \rangelookupkg{} faster, full-scan GLOBAL queries
+\rangeglobalkg{} faster, and CONTEXT queries --- retrieval scoped to a
+context and its descendants, the query shape the design is named for ---
+\rangecontextkg{} faster than the baseline. A storage-layer control --- the
+same baseline with its SQLite tables replaced by in-process dict indexes
+--- shows that most of the LOOKUP, GLOBAL, and CONTEXT advantage
+(\rangelookupkgmem{}, \rangeglobalkgmem{}, and \rangecontextkgmem{})
+survives with the storage-layer difference removed
+and is therefore attributable to the design itself. The
+temporal-range advantages do not survive the control at all --- SFDB is at
+parity or measurably slower than the control on bounded temporal ranges at
+most scales --- and insert throughput is slower than the baseline at the
+smallest scale measured and faster at every larger one; both are reported
+as negative or mixed results rather than smoothed into a single headline.
+The cost that funds the advantages that do hold is
+memory: \rangememkg{} more resident memory per fact than the baseline.
+Against three real, disk-backed production stores accessed over
+SPARQL/HTTP --- Apache Jena TDB2, OpenLink Virtuoso, and Ontotext
+GraphDB, independently
+engineered by three different organisations --- the pattern holds up on LOOKUP,
+GLOBAL, and CONTEXT --- SFDB remains faster than all three at every scale, despite
+their latencies including an HTTP round trip SFDB's in-process calls do
+not pay --- but reverses on TEMPORAL from $10\,000$ facts
+onward against all three stores, where a mature production optimiser
+overtakes SFDB's Python-level candidate filtering. We report this
+crossover as measured rather than smoothing it into either a clean win
+or a hedge; that it appears independently against three unrelated
+optimisers is evidence it is a property of mature query engines
+generally rather than one vendor's implementation. Two further
+comparisons --- \wikidatanumfacts{} genuine Wikidata facts we did not
+construct, and LUBM, the standard RDF benchmark workload, at four scales
+up to \lubmlargescale{} facts --- extend the finding rather than merely
+repeat it: LOOKUP, GLOBAL, and CONTEXT reproduce cleanly on both, while
+TEMPORAL lands in a different place on each (beating both in-house
+baselines on Wikidata, roughly at parity with them on LUBM), direct
+evidence that only TEMPORAL among the four query classes is genuinely
+sensitive to a dataset's actual shape. Building the LUBM comparison
+surfaced the evaluation's most consequential self-correction: a
+performance bug in SFDB's own CONTEXT query resolution, present for the
+entire evaluation and exposed only by a topology shape (many large,
+mutually unrelated top-level contexts) none of this paper's other
+datasets have, which required re-running and re-verifying every
+CONTEXT number this paper reports and retracting two earlier claims
+built on the unfixed numbers. Four external reference points (rdflib, Jena TDB2, Virtuoso, and
+GraphDB,
+all five query classes, result counts verified against all four), two
+real-world/standard-workload comparisons, and ten documented
+rounds of self-correction --- including the CONTEXT bug above and a
+cross-engine SPARQL semantics divergence found while building the
+Virtuoso comparison ---
+complete an evaluation built to be checked rather than believed. All
+results regenerate from the released artifact with a single command.

@@ -184,6 +184,10 @@ class FiniteTopologicalSpace:
         self._generation += 1
         self._dirty_restriction = True
 
+    def open_sets_containing(self, point_id: str) -> set[str]:
+        """Names of the open sets containing point_id (empty if unknown)."""
+        return self._point_to_opensets.get(point_id, set())
+
     @property
     def generation(self) -> int:
         return self._generation

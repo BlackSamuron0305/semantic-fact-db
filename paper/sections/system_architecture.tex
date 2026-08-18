@@ -55,6 +55,20 @@ is a controlled research implementation that shares tooling, encoding, and
 serialisation with the SFDB engine and therefore permits an
 implementation-cost-controlled comparison.
 
+The engine additionally supports a \emph{storage-layer control
+configuration}, KG-mem, selected by \texttt{storage="memory"}: the same
+reification scheme, the same dictionary-encoded identifiers, and the
+same query logic, with the SQLite dictionary tables and triple indexes
+replaced by Python dict structures
+(\texttt{MemoryDictionaryEncoder}, \texttt{MemoryIndexManager}). KG-mem
+exists because the SFDB engine answers queries from in-process indexes
+while the KG baseline answers them through SQLite; comparing SFDB
+against both variants separates what context-indexed storage buys from
+what merely avoiding SQLite round trips buys
+(Section~\ref{sec:eval:control}). A dedicated test module asserts that
+KG-mem is observationally equivalent to the SQLite-backed engine on
+every query class the paper measures.
+
 \subsection{The Sheaf-Inspired Engine (SFDB)}
 \label{sec:arch:sheaf}
 
@@ -100,9 +114,16 @@ the appropriate index path.
 \label{sec:arch:query}
 
 Both engines share a small, uniform query interface. A query is a value of
-the \texttt{Query} type with a query kind (LOOKUP, GLOBAL, WALK, JOIN,
-GLUE), an optional context scope, an optional entity anchor, an optional
-temporal envelope, and a result limit. The planner is engine-specific but
+the \texttt{Query} type with a query kind --- LOOKUP, GLOBAL, and CONTEXT
+among them, plus TEMPORAL and several SEMI-LOCAL kinds
+(NEIGHBOURHOOD, PROVENANCE) not benchmarked individually in
+Section~\ref{sec:evaluation} --- an optional context scope, an optional entity anchor, an optional
+temporal envelope, and a result limit. This is a different, smaller vocabulary
+than the abstract query mode $\tau \in \{\text{FACT}, \text{WALK}, \text{JOIN},
+\text{GLUE}\}$ of Definition~\ref{def:canonicalquery}: the formal model
+names the operations the canonical layer must support in principle, while
+the concrete \texttt{Query} type names the kinds the implementation and this
+evaluation actually dispatch on. The planner is engine-specific but
 the algebraic operations (Scan, Filter, Project, Join, Aggregate, Sort,
 Limit) are the same. Predicate pushdown, index selection, and dead-operator
 elimination are shared across both engines; join reordering and access-path

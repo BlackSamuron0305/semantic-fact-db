@@ -1,5 +1,14 @@
 # Feature Validation — SheafDB
 
+> **Snapshot notice (added 2026-08-16):** this predates the 2026-08-16
+> integrity pass. In particular, the engine adapter this document calls
+> `JenaEngineAdapter` (line ~210) was renamed to `RdflibEngineAdapter` — it
+> wraps rdflib, not Apache Jena, and the old name overstated what it
+> wraps; the class is now fully implemented and used in
+> `scripts/rdflib_reference.py` for a real external comparison, not a
+> stub. See `paper/sections/implementation.tex` §"Engine Adapters for
+> External Systems" for the current, accurate description.
+
 ## Methodology
 
 Each feature is classified by status and certainty based on:

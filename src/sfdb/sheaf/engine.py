@@ -282,11 +282,33 @@ class SheafDatabaseEngine(DatabaseEngine):
     def _build_restriction_edges(self) -> None:
         if not self._topology.is_restriction_dirty:
             return
-        os_list = list(self._topology._open_sets.values())
-        for u in os_list:
-            for v in os_list:
-                if u.name != v.name and v.is_subset_of(u) and v.points:
-                    self._restriction_graph.add_edge(u.name, v.name)
+        # Clear before rebuilding: the graph only grows via add_edge, so
+        # a rebuild that skipped this would leave edges from before the
+        # topology changed (e.g. an insert that added a point to an open
+        # set, breaking a subset relationship a prior build had recorded)
+        # permanently in place.
+        self._restriction_graph.clear()
+        # Membership-driven construction: the supersets of a nonempty
+        # open set v are exactly the open sets containing every point of
+        # v, computed by intersecting the topology's point-to-open-set
+        # map over v's points. An earlier revision used a pairwise
+        # subset sweep over all open-set pairs, which is quadratic in
+        # the number of open sets and became intractable at 10^5 facts
+        # (a single build ran for over half an hour without completing);
+        # this construction yields the identical edge set in time linear
+        # in total open-set memberships.
+        open_sets = self._topology.open_sets
+        for v in open_sets.values():
+            pts = v.points
+            if not pts:
+                continue
+            points_iter = iter(pts)
+            supersets = set(self._topology.open_sets_containing(next(points_iter)))
+            for p in points_iter:
+                supersets &= self._topology.open_sets_containing(p)
+            for u_name in supersets:
+                if u_name != v.name:
+                    self._restriction_graph.add_edge(u_name, v.name)
         self._topology.mark_restriction_clean()
 
     def _persist_section(self, fact: SemanticFact, os_names: list[str]) -> None:

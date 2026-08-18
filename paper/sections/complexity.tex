@@ -48,33 +48,41 @@ amortized, $O(|\mathcal{C}|)$ worst case.
 \centering
 \caption{Query complexity comparison. $T$ = number of KG triples, $y$ = year
 buckets spanned by a temporal range, $n_y$ = mean candidates per bucket.
-See the paragraphs below for the reasoning behind each entry.}
+KG's dictionary and triple lookups are $O(\log T)$ against the SQLite
+B-tree index; the KG-mem control (Section~\ref{sec:eval:control}) replaces
+that index with a Python dict and is $O(1)$ for the same lookups, which is
+why its row is listed separately here. See the paragraphs below for the
+reasoning behind each entry.}
 \label{tab:complexity:query}
-\begin{tabular}{@{}lcc@{}}
+\begin{tabular}{@{}lccc@{}}
 \toprule
-Operation & Knowledge Graph & Sheaf Database \\
+Operation & KG (SQLite) & KG-mem (dict) & Sheaf Database \\
 \midrule
-Entity Lookup & $O(\log T + n)$ & $O(1 + n)$ \\
-Full Scan (GLOBAL) & $O(T)$ & $O(N)$ \\
-Context Lookup & $O(\log T + n)$ & $O(\log |\mathcal{C}| + n)$ \\
-Restriction & N/A (triple-oriented) & $O(k)$ \\
-Global Sections (Gluing) & N/A & $O(|\mathcal{C}| \cdot N^2)$ worst \\
-Neighbourhood Search & $O(\log T + n)$ & $O(d + n)$ \\
-Temporal Range (bounded) & $O(T)$ & $O(y \cdot n_y)$ \\
-Temporal Range (unbounded) & $O(T)$ & $O(\log M + n)$ \\
+Entity Lookup & $O(\log T + n)$ & $O(1 + n)$ & $O(1 + n)$ \\
+Full Scan (GLOBAL) & $O(T)$ & $O(T)$ & $O(N)$ \\
+Context Lookup & $O(\log T + n)$ & $O(n)$ & $O(n)$ \\
+Restriction & N/A (triple-oriented) & N/A & $O(1)$ per fact \\
+Global Sections (Gluing) & N/A & N/A & $O(|\mathcal{C}| \cdot N^2)$ worst \\
+Neighbourhood Search & $O(\log T + n)$ & $O(n)$ & $O(d + n)$ \\
+Temporal Range (bounded) & $O(T)$ & $O(T)$ & $O(y \cdot n_y)$ \\
+Temporal Range (unbounded) & $O(T)$ & $O(T)$ & $O(\log M + n)$ \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 \paragraph{Entity Lookup.} KG locates every triple mentioning the entity through
-its POS index and reassembles each matching fact from its reified triples.
-SFDB resolves the entity to a candidate fact-id set via the neighbourhood
+its POS index (an SQLite B-tree, $O(\log T)$ to seek) and reassembles each
+matching fact from its reified triples. KG-mem replaces that B-tree with
+a Python dict keyed the same way, making the seek $O(1)$ at the cost of
+losing persistence (Section~\ref{sec:eval:control}). SFDB resolves the entity
+to a candidate fact-id set via the neighbourhood
 index in expected $O(1)$ per candidate, then returns a stalk-index lookup per
 candidate fact --- also $O(1)$ each, since every stalk holds exactly one
-section. Both engines are implemented as genuine hash-based lookups; the
-gap observed empirically (Section~\ref{sec:eval:query}) is a constant-factor
-one, set by SQLite round-trips and reified-triple reconstruction on the KG
-side rather than by asymptotic complexity.
+section. All three engines reassemble/return $n$ result facts in
+$O(n)$; the gap observed empirically (Section~\ref{sec:eval:query}) against
+the SQLite-backed KG baseline is dominated by the B-tree-vs-dict seek and by
+reified-triple reconstruction, and both are constant-factor effects, not
+asymptotic ones --- which the KG-mem control isolates directly.
 
 \paragraph{Full Scan (GLOBAL).} An unrestricted query that must return every
 fact. KG scans its triple table once ($O(T)$ where $T = O(N \cdot k)$ is the
@@ -88,12 +96,34 @@ number of open sets per fact --- correct but strictly dominated by the flat
 index that was already being maintained for entity lookups. We describe this
 correction in Section~\ref{sec:discussion:interpretation}.
 
-\paragraph{Context Lookup.} KG requires an index scan; SFDB performs a direct
-open set lookup with context-to-open-set index.
+\paragraph{Context Lookup.} A query anchored at a context $c$ must return
+every fact stated at $c$ or at a descendant of $c$
+(Section~\ref{sec:eval:query} reports this as the CONTEXT class). KG
+matches its indexed \texttt{context} column against $c$ exactly and
+against the prefix pattern $c$\texttt{.\%}, both served by its
+B-tree \texttt{idx\_context} index ($O(\log T)$ to seek, KG-mem $O(n)$
+via an unindexed scan over the context space). SFDB's topology builder
+registers every fact into the open set of its own context \emph{and}
+every ancestor context's open set at insert time
+(Section~\ref{sec:arch:sheaf}), so the open set
+named for $c$ already contains the full sub-tree union by construction:
+a CONTEXT query is a single $O(1)$ dictionary lookup for that open set
+followed by an $O(n)$ pass over its members, rather than a traversal of
+$c$'s descendants at query time.
 
-\paragraph{Restriction.} Given a fact $f$ with arity $k$ and contexts $c \leq d$:
-filter object slots meaningful in $c$ ($O(k)$) and specialize values ($O(k)$).
-Total $O(k)$, independent of $N$.
+\paragraph{Restriction.} Given a fact $f$ and a target context $c$,
+restriction (Definition~\ref{def:restriction}) evaluates a single
+context-comparability check, $\operatorname{context}(f) \leq c$, and
+either returns $f$ unchanged or reports the restriction as undefined; no
+field of $f$ is read or rewritten. The check is a prefix comparison over
+context paths, $O(\min(\operatorname{depth}(f), \operatorname{depth}(c)))$,
+which is $O(1)$ for the bounded-depth context trees this design targets
+and independent of $N$ and of the fact's arity $k$. This operation is not
+on the path of any query class benchmarked in
+Section~\ref{sec:evaluation}: LOCAL and SEMI-LOCAL query execution reads
+sections directly from the relevant open sets and filters them, and only
+the consistency checker (Section~\ref{sec:correctness:integrity}), exercised
+at unit-test scale, calls it.
 
 \paragraph{Global Sections (Gluing).} This is a distinct operation from the
 GLOBAL query class benchmarked in Section~\ref{sec:evaluation}: it computes
@@ -116,7 +146,7 @@ for workloads that call $\textsc{Glue}()$ directly, and is unverified beyond
 the unit-test scale reported in Section~\ref{sec:correctness}.
 
 \paragraph{Neighbourhood Search.} Given a point $x$ with minimal neighbourhood
-$\mathcal{B}(x) = \downarrow \alpha(x)$, compute $\mathcal{B}(x)$ in $O(1)$,
+$\mathcal{B}(x) = \downarrow \operatorname{context}(x)$, compute $\mathcal{B}(x)$ in $O(1)$,
 expand outward by $d$ steps, and collect sections in $O(n)$ cumulative.
 Total: $O(d + n)$.
 
@@ -176,30 +206,50 @@ These bounds are tested empirically by the benchmark framework
 
 \begin{enumerate}
     \item SFDB insertion is typically $O(d)$ vs.\ KG's $O(k \log T)$ for contexts
-          of depth $d$; empirically SFDB is $1.05$--$1.36\times$ faster than
-          KG at every scale measured, narrowest at $100$ facts where small
-          absolute latencies plausibly compress the gap.
+          of depth $d$; empirically the two bounds trade places at small
+          $N$ rather than one dominating throughout (\rangeinsertkg{}
+          across the scales measured, with SFDB slower at the smallest
+          scale) --- consistent with a fixed per-insert overhead in the
+          open-set registration step that has not yet been amortised
+          against KG's per-triple decomposition cost at $N=100$.
     \item SFDB LOOKUP queries are faster than KG's reified-triple
-          reconstruction at every scale measured ($23$--$32\times$ across
-          $10^2$--$10^4$ facts), consistent with both being $O(1)$-per-candidate
-          lookups with a KG-side constant-factor penalty from SQLite round trips.
+          reconstruction at every scale measured (\rangelookupkg{} across
+          $10^2$--$10^5$ facts, and \rangelookupkgmem{} against the
+          dict-indexed control), consistent with both being
+          $O(1)$-per-candidate lookups where the KG side pays a
+          constant-factor penalty for reconstruction, and the SQLite
+          variant an additional one for round trips.
     \item SFDB GLOBAL queries are faster than KG's triple-table scan at
-          every scale measured ($44$--$95\times$ across $10^2$--$10^4$
+          every scale measured (\rangeglobalkg{} across $10^2$--$10^5$
           facts), once the query path uses the flat stalk index rather
           than open-set enumeration; this reverses what an earlier, buggy
           implementation measured, as discussed in
           Section~\ref{sec:discussion:interpretation}.
-    \item SFDB's temporal indexing is faster than KG's flat scan-and-filter
-          on both bounded ranges ($1.2$--$1.4\times$, via the year-bucketed
-          index) and unbounded ranges ($1.1$--$1.2\times$, via the flat
-          binary-searchable index added specifically for this case), as the
-          $O(y \cdot n_y)$ and $O(\log M + n)$ bounds above predict; this
-          also reverses what an earlier implementation measured on
-          unbounded ranges, as discussed in
-          Section~\ref{sec:discussion:temporal-unbounded}.
+    \item SFDB CONTEXT queries are faster than KG's indexed-but-filtered
+          scan at every scale measured (\rangecontextkg{}, and
+          \rangecontextkgmem{} against the dict-indexed control), because
+          the topology pre-materialises a context's full sub-tree as a
+          single open set at insert time rather than resolving membership
+          at query time; both engines are $O(n)$ in the result size, so
+          the gap is a constant-factor one, and it is the only query class
+          where that constant factor is what the design itself, rather
+          than the storage layer, is being tested on.
+    \item SFDB's temporal indexing is faster than the SQLite-backed KG's
+          flat scan-and-filter on both bounded ranges (\rangetemporalkg{},
+          via the year-bucketed index) and unbounded ranges
+          (\rangetemporalunbkg{}, via the flat binary-searchable index
+          added specifically for this case), as the $O(y \cdot n_y)$ and
+          $O(\log M + n)$ bounds above predict --- but the storage-layer
+          control shows these margins do not survive at all: SFDB is at
+          parity or slower than KG-mem on bounded TEMPORAL at three of
+          four scales, so the bound is not the source of the SQLite-baseline
+          margin
+          (Section~\ref{sec:eval:control}). This also reverses what an
+          earlier implementation measured on unbounded ranges, as
+          discussed in Section~\ref{sec:discussion:temporal-unbounded}.
     \item The expected-case $O(N \log |\mathcal{C}|)$ gluing complexity for
           the $\textsc{Glue}()$ operation (distinct from a GLOBAL query) is
           conjectured for tree-structured context hierarchies and is
           checked only at unit-test scale; it is not benchmarked at
-          $10^4$ facts in this paper.
+          $10^5$ facts in this paper.
 \end{enumerate}

@@ -97,9 +97,23 @@ The partial order $\leq$ is the prefix order: $c_1 \leq c_2$ iff $c_2$ is a pref
 
 **Depth:** $\operatorname{depth}(c) = n$ where $c$ has $n$ dot-separated segments. The root has depth $0$.
 
-**Meet:** The meet (greatest lower bound) $c_1 \wedge c_2$ is the longest common prefix of $c_1$ and $c_2$, which is the most specific context that is a sub-context of both.
+**Meet (corrected 2026-08-16):** The meet (greatest lower bound)
+$c_1 \wedge c_2$ is **partial**: if $c_1 \le c_2$ then $c_1 \wedge c_2 = c_1$
+(symmetrically for $c_2 \le c_1$), but two *incomparable* contexts have no
+common lower bound at all — no context can carry two distinct sibling paths
+as prefixes, so the meet does not exist for them. The longest common
+prefix of two incomparable contexts is their **join** $c_1 \vee c_2$
+(least upper bound, most specific common ancestor), not their meet. An
+earlier version of this note conflated the two, claiming the longest
+common prefix is "the most specific context that is a sub-context of
+both" — that description is only true for the join direction (most
+specific common *ancestor*), and is not a meet at all.
 
-**Implementation:** See `sfdb.common.types.Context`.
+**Implementation:** See `sfdb.common.types.Context` (`meet()` returns
+`Context | None`, `None` for incomparable contexts) and
+`sfdb.sheaf.sheaf.ContextPoset` (same convention). See
+`tests/common/test_context_lattice.py` for the lattice-law tests that pin
+this.
 
 ---
 
@@ -132,8 +146,14 @@ In the Alexandrov topology induced by $(\mathcal{C}, \leq)$:
 
 **Properties:**
 - $U_{\top} = X$ (the whole space).
-- $U_{c_1} \cap U_{c_2} = U_{c_1 \wedge c_2}$.
-- $U_{c_1} \cup U_{c_2} = U_{c_1 \vee c_2}$ when the join exists.
+- $U_{c_1} \cap U_{c_2} = U_{c_1 \wedge c_2}$ when $c_1, c_2$ are comparable;
+  $U_{c_1} \cap U_{c_2} = \emptyset$ otherwise (**corrected 2026-08-16** —
+  the meet does not exist for incomparable contexts, so the unconditional
+  form of this property, as originally stated here, is false for them).
+- $U_{c_1} \cup U_{c_2} \subseteq U_{c_1 \vee c_2}$; the join always exists
+  (it is the longest common prefix), but equality need not hold, since
+  $U_{c_1 \vee c_2}$ can also contain facts from sibling branches neither
+  $U_{c_1}$ nor $U_{c_2}$ reaches.
 
 **Implementation:** See `sfdb.sheaf.topology.OpenSet`.
 
@@ -169,29 +189,44 @@ where $\alpha: X \to \mathcal{C}$ maps each point to its context. This is the sm
 
 ## Definition 8: Restriction Map
 
-Let $c, d \in \mathcal{C}$ with $c \leq d$ (so $c$ is a sub-context of $d$). The **restriction map**
+**Corrected 2026-08-16.** The original version of this definition below
+described restriction as rewriting a fact's object tuple by "dropping
+object slots that are not meaningful in $c$" and "specialising values."
+No restriction implementation in the codebase does this — see
+`research/proofs/restriction_maps.md` for the full correction. The actual
+operation is an identity map defined only where the fact is already
+visible from the narrower context.
+
+Let $c, d \in \mathcal{C}$ with $c \leq d$ (so $c$ is a sub-context of $d$, and $U_c \subseteq U_d$). The **restriction map**
 
 \[
-\rho_{d,c}: \mathcal{P}(\mathcal{F}_d) \to \mathcal{P}(\mathcal{F}_c)
+\rho_{d,c}: F(d) \to F(c)
 \]
 
-sends a set of facts valid in context $d$ to the corresponding set valid in the more specific context $c$.
-
-Restriction acts on individual facts as:
+is the identity on facts, restricted to the subset of $F(d)$ whose own
+context already lies in $U_c$:
 
 \[
-\rho_{d,c}(f) = (i, s, r, \vec{o}', c, k, m)
+\rho_{d,c}(f) =
+\begin{cases}
+f & \text{if } \operatorname{context}(f) \le c, \\
+\text{undefined} & \text{otherwise.}
+\end{cases}
 \]
 
-where $\vec{o}'$ is obtained from $\vec{o}$ by:
-1. Dropping object slots that are not meaningful in $c$.
-2. Specialising values according to the more specific context.
+No field of $f$ is read or modified when restriction succeeds; it is a
+membership check, not a specialisation operator. (Working over sets of
+facts, $\rho_{d,c}(S) = S \cap F(c)$ for $S \subseteq F(d)$, is the
+pointwise lift of the same map.)
 
 **Functoriality:** Restriction maps satisfy:
-1. $\rho_{c,c} = \operatorname{id}_{\mathcal{P}(\mathcal{F}_c)}$ (identity).
-2. $\rho_{e,c} = \rho_{d,c} \circ \rho_{e,d}$ for $c \leq d \leq e$ (composition).
+1. $\rho_{c,c} = \operatorname{id}_{F(c)}$ (identity).
+2. $\rho_{e,c} = \rho_{d,c} \circ \rho_{e,d}$ for $c \leq d \leq e$ (composition) — both sides equal the identity restricted to $\{f \in F(e) : \operatorname{context}(f) \le c\}$.
 
-**Implementation:** See `sfdb.common.types.RestrictionMap`, `sfdb.sheaf.sheaf.Presheaf.restrict()`.
+**Implementation:** See `sfdb.sheaf.presheaf.Presheaf.restrict()` (the
+membership-filter version the live query planner and consistency checker
+actually call) and `sfdb.sheaf.sheaf.Presheaf.restrict()` (an equivalent,
+Context-based version used by the standalone gluing/consistency module).
 
 ---
 

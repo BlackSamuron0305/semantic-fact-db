@@ -16,28 +16,101 @@ coordinate and are the standard mechanism for scoping. Property
 graphs~\cite{angles2017property}, as implemented in Neo4j and Amazon Neptune,
 decorate edges with attribute maps, which handles some higher-arity cases
 gracefully but reintroduces the reification problem for facts of arity above
-two or three.
+two or three (Section~\ref{sec:related-work:lpg} returns to this comparison
+in more depth below).
 
 The reification cost of representing $n$-ary facts in triples is well
-documented~\cite{angles2008survey}. It is $O(k)$ triples and $O(k)$ joins per
-fact of arity $k$. Various mitigations exist---SPARQL 1.1's property paths,
-star-schema optimisations, RDF-star for statement-level annotation---but the
-underlying atomicity mismatch remains: the storage unit is smaller than the
-semantic unit. Our KG baseline implements the standard reified approach with
-SPO/POS/OSP indexes and dictionary encoding. We do not claim this baseline is
-state of the art; it is a controlled reference point.
+documented~\cite{angles2008survey,noy2006nary}. It is $O(k)$ triples and
+$O(k)$ joins per fact of arity $k$. Our KG baseline implements the standard
+reified approach with SPO/POS/OSP indexes and dictionary encoding. We do
+not claim this baseline is state of the art; it is a controlled reference
+point.
+
+\paragraph{Statement-level annotation and $n$-ary mitigation.}
+The reification tax has motivated a family of mitigations inside the
+triple model itself. RDF-star~\cite{hartig2017rdfstar,w3c2021rdfstar}
+allows a triple to appear as the subject or object of another triple, so
+statement-level metadata (provenance, confidence, temporal scope) no
+longer needs a minted event node; the singleton-property
+encoding~\cite{nguyen2014singleton} achieves a similar effect by minting
+a unique predicate per statement. Both are genuine improvements over
+classical reification for the \emph{annotation} use case, and both are
+a different bet than ours. RDF-star keeps the triple as the storage
+unit and adds a nesting mechanism on top: a fact of arity $k$ is still
+$k$ triples plus quoted-triple annotations, an entity-anchored query
+still reassembles the fact through joins, and context remains an
+annotation on statements rather than an index over them. SFDB inverts
+that bet: the atomic storage unit is the whole $n$-ary fact, and the
+context poset is the primary index, so entity-anchored retrieval is a
+stalk lookup rather than a join, at the memory cost quantified in
+Section~\ref{sec:eval:memory}. Whether RDF-star's engine-level
+implementations (which are maturing quickly) close the retrieval gap in
+practice is an empirical question our evaluation does not answer; the
+architectural distinction --- annotate statements versus index by
+context --- is the point this paper explores.
+
+\paragraph{Labeled property graphs.}
+\label{sec:related-work:lpg}
+Labeled property graphs (LPGs)~\cite{angles2017property}, as
+implemented by Neo4j, Amazon Neptune, and TigerGraph, are the other
+obvious answer to ``why not just use a system that already handles
+$n$-ary facts.'' An LPG attaches a key-value property map directly to
+each node and edge, so a binary relation with metadata (an
+\texttt{employed\_at} edge carrying a \texttt{since} property) needs no
+reification at all. This genuinely dissolves the reification problem
+for facts whose natural arity is two: subject and object are the
+edge's endpoints, and everything else is a property on that one edge,
+retrieved with the edge in a single lookup. It does not dissolve it for
+facts of higher arity, which is the case this paper is about: a
+property map is attached to one edge between two nodes, so a fact with
+three or more essential participants (a grant awarded to a recipient by
+a funder for a project) still needs either a synthetic intermediate
+node with several edges radiating from it --- the same reification this
+paper's KG baseline performs, just drawn as a graph instead of a triple
+store --- or an awkward encoding as edge properties on one arbitrarily
+chosen pair of participants, which asymmetrically privileges two of the
+$n$ participants over the rest. Context is a second, independent gap:
+LPG query languages (Cypher, Gremlin) have no native notion of a
+context poset to index by. Scoping in practice is done either with
+property filters evaluated per node/edge at query time (linear in the
+matched set, not a direct lookup) or with separate physical databases
+per tenant, neither of which offers the direct \texttt{context:<c>}
+open-set lookup or the restriction-map structure this paper's context
+poset provides (Section~\ref{sec:formal_definitions}). The comparison
+is therefore not ``sheaf-indexed store versus property graph'' in the
+abstract; it is that LPGs solve a real subset of the reification
+problem this paper opens with --- binary facts with metadata --- cleanly
+and natively, while leaving both higher-arity reification and
+hierarchical context indexing as open problems on top of the same
+substrate this paper's KG baseline already represents. We do not
+benchmark against Neo4j or Neptune directly: our KG baseline's
+reified-triple SPO/POS/OSP design is architecturally closer to the
+production RDF stores we do compare against
+(Section~\ref{sec:eval:jena}--Section~\ref{sec:eval:graphdb}) than to an
+LPG's native edge-property storage, and a fair LPG comparison would
+require a fourth adapter and a schema translation this paper does not
+attempt; we name it here as the most natural fourth-store extension
+(Section~\ref{sec:future:jena}) rather than claim a result we did not
+measure.
 
 \paragraph{Categorical and topological database models.}
-The categorical database
-literature~\cite{patterson2022sheaf,spivak2012functorial} recasts schemas as
-categories and instances as functors. Sheaf structures have been used for
-distributed sensor fusion~\cite{robinson2020sheaf} and for reasoning about
-locally consistent but globally inconsistent data collections. Simplicial
+The categorical database literature~\cite{spivak2012functorial} recasts
+schemas as categories and instances as functors. Sheaf structures have
+been used for distributed sensor fusion~\cite{robinson2017sheaves} and
+for reasoning about locally consistent but globally inconsistent data
+collections, where obstructions to global sections characterise
+contextuality~\cite{abramsky2011sheaf}. Simplicial
 complexes and cellular sheaves have been proposed as data models for
 higher-order relationships~\cite{edelsbrunner2010computational}. Formal Concept
 Analysis~\cite{ganter1999formal} organises data around a lattice of concepts
 that shares surface structural features with our context poset, but does not
 include the restriction maps or stalks that our design uses operationally.
+Incidence algebras over locally finite posets~\cite{rota1964moebius} are,
+in our own survey of candidate formalisms, the nearest mathematical
+neighbour to the context-poset design: they support M{\"o}bius-inversion
+style aggregation over exactly the poset structure we index by, and we
+regard an incidence-algebra query layer as the most promising follow-up
+formalism (Section~\ref{sec:future}).
 
 We borrow terminology and structural intuition from this literature, but
 we are not proving a theorem about sheaves. As we make explicit throughout, the
@@ -60,9 +133,10 @@ is taken seriously.
 To the best of our knowledge, no prior system provides all of the following
 together: a context-indexed semantic fact storage engine with stalk-based
 LOOKUP, a co-implemented reified triple-store baseline, a canonical
-intermediate representation with a mechanised proof of semantic equivalence
-between the two, and a benchmark evaluation that reports both wins and losses
-across a LOOKUP/GLOBAL taxonomy. The individual ingredients are all standard,
+intermediate representation with a constructive semantic-equivalence proof
+between the two that a runtime harness checks on every insert and query, and
+a benchmark evaluation that reports both wins and losses
+across a LOOKUP/GLOBAL/CONTEXT/TEMPORAL taxonomy. The individual ingredients are all standard,
 in some cases decades old. What this paper contributes is a coherent design
 that combines them and an honest evaluation of what the combination is and is
 not worth.

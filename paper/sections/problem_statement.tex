@@ -50,7 +50,14 @@ the sense of Definition~\ref{def:semanticequiv}.
 The equivalence claim above is proved constructively in
 Section~\ref{sec:correctness} through a canonical intermediate representation
 and checked at every insert and every query by the shared verification
-harness. The performance claim---that a context-indexed engine can answer
-entity-centric lookups, unrestricted scans, and bounded temporal-range
-queries faster than a reified triple store by trading resident memory for
-latency---is measured empirically in Section~\ref{sec:evaluation}.
+harness. The performance claim is narrower than it might first appear, and
+Section~\ref{sec:evaluation} measures it precisely rather than assuming it
+holds uniformly: a context-indexed engine answers entity-centric lookups,
+unrestricted scans, and context-scoped sub-tree queries faster than a
+reified triple store, and a storage-layer control isolates that this
+advantage is a property of the design rather than of the baseline's use of
+SQLite. Temporal range queries do not share this property once the same
+control is applied, and insert throughput favours the design only above a
+small-scale threshold; both are reported as measured, not folded into the
+headline claim above. The cost that funds the advantages that do hold is
+resident memory.

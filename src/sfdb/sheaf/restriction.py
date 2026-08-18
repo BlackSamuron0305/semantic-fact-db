@@ -97,6 +97,19 @@ class RestrictionGraph:
             self._edges[source] = set()
         self._edges[source].add(target)
 
+    def clear(self) -> None:
+        """Discard all edges.
+
+        Must be called before a full rebuild: the graph only ever grows
+        via add_edge, so a rebuild that skips clear() leaves edges from
+        the pre-rebuild topology in place. If an insert since the last
+        build removed a subset relationship (an open set gained a point
+        the would-be superset doesn't have), the stale edge would
+        otherwise survive and route SEMI-LOCAL queries through a
+        restriction path the current topology no longer supports.
+        """
+        self._edges.clear()
+
     def get_targets(self, source: str) -> frozenset[str]:
         return frozenset(self._edges.get(source, set()))
 

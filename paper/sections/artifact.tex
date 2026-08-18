@@ -28,20 +28,94 @@ Generation date & \texttt{\generationdate} \\
 \end{table}
 
 \label{sec:artifact:reproducibility}
-From a clean clone, four commands reproduce every number and figure in
-this paper (\texttt{sfdb benchmark} with no \texttt{--size} argument runs
-all three scales --- 10 timed runs and 2 warm-up iterations per query
-class per Section~\ref{sec:eval:setup} --- and exits non-zero if any
-cross-engine verification fails):
+From a clean clone, the following commands reproduce every number and
+figure in this paper except the Jena TDB2, Virtuoso, and GraphDB comparisons
+and the three LUBM-vs-external-store runs, all four of which require a
+separately running external service (see below)
+(\texttt{sfdb benchmark} with no \texttt{--size}
+argument runs all four scales --- 10 timed runs and 2 warm-up iterations
+per query class per Section~\ref{sec:eval:setup} --- and exits non-zero
+if any cross-engine verification fails):
 
 \begin{verbatim}
 uv sync --group dev
-uv run pytest                              # 358 tests should pass
-uv run sfdb benchmark                      # populates results/
+uv run pytest                              # full test suite should pass
+uv run sfdb benchmark                      # populates results/ (3 engines)
+uv run python scripts/rdflib_reference.py  # external rdflib reference point
+uv run python scripts/wikidata_case_study_benchmark.py  # case study
+uv run python scripts/lubm_benchmark.py    # LUBM vs. the 3 in-house engines
 uv run python scripts/generate_tables.py   # tables + reproducibility macros
 uv run python scripts/generate_figures.py  # figures
 cd paper && latexmk -pdf main.tex          # main.pdf
 \end{verbatim}
+
+The case-study benchmark reads a cached Wikidata snapshot shipped in the
+artifact rather than querying Wikidata live. A separate fetch script
+(under \texttt{scripts/}) refreshes that snapshot but is an explicit,
+optional step, not part of the reproduction sequence above.
+
+The Apache Jena TDB2 comparison (Section~\ref{sec:eval:jena}) requires a
+separately running Fuseki server, since it is a genuine external process
+rather than code this artifact ships and controls. Requires a Java~17+
+runtime, which the reproduction script does not install:
+
+\begin{verbatim}
+# One-time: download and start a Fuseki server with a fresh TDB2 dataset
+curl -LO https://dlcdn.apache.org/jena/binaries/apache-jena-fuseki-6.2.0.zip
+unzip apache-jena-fuseki-6.2.0.zip && cd apache-jena-fuseki-6.2.0
+java -jar fuseki-server.jar --loc=./tdb2data --update --port 3030 /sfdb &
+
+# Then, from the repository root:
+uv run python scripts/jena_reference.py    # populates results/
+uv run python scripts/lubm_external_reference.py --store jena  # LUBM vs. Jena
+uv run python scripts/generate_tables.py   # regenerates jena tables too
+\end{verbatim}
+
+The OpenLink Virtuoso comparison (Section~\ref{sec:eval:virtuoso})
+likewise requires a separately running Virtuoso instance. The simplest
+route is the official Docker image:
+
+\begin{verbatim}
+# One-time: start a Virtuoso open-source-edition container
+docker run -d --name virtuoso-sfdb -p 8890:8890 -p 1111:1111 \
+    -e DBA_PASSWORD=sfdb_bench_2026 \
+    openlink/virtuoso-opensource-7:latest
+
+# Then, from the repository root:
+uv run python scripts/virtuoso_reference.py  # populates results/
+uv run python scripts/lubm_external_reference.py --store virtuoso  # LUBM vs. Virtuoso
+uv run python scripts/generate_tables.py     # regenerates virtuoso tables too
+\end{verbatim}
+
+The Ontotext GraphDB comparison (Section~\ref{sec:eval:graphdb})
+likewise requires a separately running GraphDB instance. The simplest
+route is the official Docker image; unlike Virtuoso, no authentication
+or manual repository setup is needed:
+
+\begin{verbatim}
+# One-time: start a GraphDB free-edition container
+docker run -d --name graphdb-sfdb -p 7200:7200 ontotext/graphdb:10.7.3
+
+# Then, from the repository root (auto-creates its repository):
+uv run python scripts/graphdb_reference.py   # populates results/
+uv run python scripts/lubm_external_reference.py --store graphdb  # LUBM vs. GraphDB
+uv run python scripts/generate_tables.py     # regenerates graphdb tables too
+\end{verbatim}
+
+To reproduce independent of the host's Python version or
+operating system, a \texttt{Dockerfile} at the repository root builds
+and runs the test suite in a container:
+
+\begin{verbatim}
+docker build -t sfdb .
+docker run --rm sfdb                       # runs the test suite
+docker run --rm sfdb uv run sfdb benchmark # runs the benchmark suite
+\end{verbatim}
+
+The $14$ tests that require a live Jena, Virtuoso, or GraphDB instance
+skip inside
+the isolated container rather than fail. The image does not bundle TeX
+Live or the external stores themselves.
 
 Source code, data generators, and benchmark harnesses are released under
 the MIT License.

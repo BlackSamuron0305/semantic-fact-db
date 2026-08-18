@@ -125,6 +125,7 @@ def generate_placeholder_figures() -> list[Path]:
         "scaling",
         "scalability",
         "speedup",
+        "control",
         "cdf",
         "memory",
         "storage",

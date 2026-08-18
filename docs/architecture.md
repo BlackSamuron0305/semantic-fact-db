@@ -1,47 +1,48 @@
 # Architecture Overview
 
+> **Corrected 2026-08-16.** This document previously described a third
+> engine, "SimplicialDB" (simplicial sets, incidence matrices, boundary
+> operators, homology), as a real, implemented "secondary mathematical
+> approach." It never was: `PLAN.md`'s Phase 0 (2026-07-17) explicitly
+> archived that draft to `paper/drafts/system_design.tex` as dead code
+> that was never wired into the benchmark or the paper. This document is
+> rewritten below to describe only the two engines that actually exist
+> and are benchmarked — `KnowledgeGraphEngine` and `SheafDatabaseEngine`
+> — plus the `KnowledgeGraphEngine(storage="memory")` control variant
+> added 2026-08-16 (see `paper/sections/evaluation.tex` §"The KG-mem
+> Storage-Layer Control").
+
 ## System Architecture
 
 ```
 +------------------------------------------------------------------+
-|                         Query Language                            |
-|                    (representation-agnostic)                      |
+|                    Canonical Semantic Model                      |
+|                   (SemanticFact dataclass)                       |
+|            validation, serialisation (JSON/Parquet/MessagePack)  |
 +------------------------------------------------------------------+
-                            |
-                            v
-+------------------------------------------------------------------+
-|                     Canonical Semantic Model                      |
-|                    (SemanticFact dataclass)                       |
-|                    - validation                                   |
-|                    - serialization (JSON/Parquet/MessagePack)     |
-+------------------------------------------------------------------+
-                            |
-                            v
-+-----------------------------------+-------------------------------+
-|           Query Planner           |      Configuration System     |
-|  (logical plan -> physical plans) |   (YAML / env / CLI)         |
-+-----------------------------------+-------------------------------+
                             |
                             v
 +------------------+------------------+----------------------------+
-|  Knowledge Graph |  Sheaf Database  |  Simplicial Database        |
-|  (RDF baseline)  |  (primary)       |  (secondary)                |
+|  Knowledge Graph |  Sheaf Database  |  KG-mem (storage-layer      |
+|  (RDF baseline)  |  (context-       |  control: same reification  |
+|                  |   indexed)       |  as KG, dict indexes        |
+|                  |                  |  instead of SQLite)         |
 +------------------+------------------+----------------------------+
-|  SPO/POS/OSP     |  Context/Stalk   |  Simplex/Incidence          |
-|  indexes         |  Restriction/    |  Boundary/Dimension         |
-|                  |  Neighbourhood   |  indexes                    |
+|  SPO/POS/OPS     |  Open-set/Stalk/ |  Same code path as KG,      |
+|  indexes over    |  Restriction/    |  MemoryDictionaryEncoder +  |
+|  SQLite          |  Neighbourhood   |  MemoryIndexManager swap    |
+|                  |  indexes         |  the SQLite tables for      |
+|                  |                  |  Python dicts               |
 +------------------+------------------+----------------------------+
                             |
                             v
 +------------------------------------------------------------------+
-|                      Execution Engine                             |
-|                    (common query interface)                       |
+|          DatabaseEngine ABC (shared query/insert interface)      |
 +------------------------------------------------------------------+
                             |
                             v
 +------------------------------------------------------------------+
-|                    Canonical Results                              |
-|              (verifiable, comparable, benchmarkable)               |
+|         Canonical layer: cross-engine equivalence checking       |
 +------------------------------------------------------------------+
 ```
 
@@ -77,11 +78,13 @@ the CRUD interface that the execution engine calls.
 ### Indexes
 Maintains auxiliary data structures for fast lookup:
 
-- **KG**: SPO, POS, OSP indexes.
-- **SheafDB**: Context Index, Stalk Index, Restriction Index,
-  Neighbourhood Index, Global Section Cache.
-- **SimplicialDB**: Simplex Index, Incidence Matrix, Boundary
-  Operator, Dimension Index.
+- **KG**: SPO, POS, OPS indexes (SQLite B-tree); optionally SOP, PSO,
+  OSP too in six-index mode.
+- **KG-mem**: the same indexes, backed by Python dicts instead of
+  SQLite.
+- **SheafDB**: Open-Set Index, Stalk Index, Neighbourhood Index,
+  Restriction Index, Context Index, Temporal Index, Provenance Index,
+  Global Section Cache.
 
 All indexes are engine-private and not exposed through the common API.
 
@@ -118,7 +121,7 @@ benchmark results.  Not part of the runtime.
 
 ### Knowledge Graph (KG)
 - **Type**: Baseline / control group.
-- **Storage**: TripleStore with SPO/POS/OSP hash indexes.
+- **Storage**: SQLite-backed triple table with SPO/POS/OPS indexes.
 - **Facts**: N-ary facts are decomposed via reification into binary
   triples.
 - **Queries**: Graph traversal and join-based.
@@ -127,40 +130,54 @@ benchmark results.  Not part of the runtime.
 
 ### Sheaf Database (SheafDB)
 - **Type**: Primary research contribution.
-- **Storage**: SheafStore with context-indexed sections.
-- **Facts**: Stored directly as n-ary sections without decomposition.
-- **Queries**: Restriction-map-based localisation + gluing for global
-  sections.
-- **Optimiser**: Context selectivity estimation, restriction pushdown.
+- **Storage**: context-indexed open sets and sections (see
+  `sheaf_database.md`).
+- **Facts**: Stored directly as complete sections without decomposition.
+- **Queries**: LOCAL/SEMI-LOCAL/GLOBAL classification, dispatched to the
+  stalk, neighbourhood, context, and temporal indexes; gluing is a
+  separate, unbenchmarked operation (`Glue()`), not on the query path.
 
-### Simplicial Database (SimplicialDB)
-- **Type**: Secondary mathematical approach.
-- **Storage**: SimplicialSet with incidence matrices and boundary
-  operators.
-- **Facts**: Stored as simplices (n-simplex for arity-n fact).
-- **Queries**: Face / degeneracy operations, boundary computation,
-  homology computation.
-- **Optimiser**: Dimension pruning, face-map caching.
+### KG-mem (storage-layer control)
+
+Not a separate engine class — `KnowledgeGraphEngine(storage="memory")`.
+Identical reification and query logic to the KG baseline above, with the
+SQLite dictionary tables and triple indexes (`DictionaryEncoder`,
+`IndexManager`) replaced by pure-Python equivalents
+(`MemoryDictionaryEncoder`, `MemoryIndexManager`). It exists to isolate
+what context-indexed storage buys from what merely avoiding SQLite round
+trips buys; see `paper/sections/evaluation.tex` §"The KG-mem Storage-Layer
+Control" for why and `tests/kg/test_memory_variant.py` for the equivalence
+tests pinning it to the SQLite-backed engine's behaviour.
 
 ## Common API (DatabaseEngine)
 
 Every engine implements the same ABC:
 
-| Method               | Description                              |
-|----------------------|------------------------------------------|
-| `create(config)`     | Initialise storage and indexes           |
-| `drop()`             | Destroy all data                         |
-| `insert(fact)`       | Store a SemanticFact                     |
-| `update(id, fact)`   | Replace a fact                           |
-| `delete(id)`         | Remove a fact                            |
-| `query(query)`       | Execute a logical query                  |
-| `explain(query)`     | Return execution plan (no execution)     |
-| `statistics()`       | Return engine statistics                 |
-| `verify()`           | Run consistency checks                   |
-| `export(fmt)`        | Export all facts as bytes               |
-| `import(data, fmt)`  | Import facts from bytes                 |
+| Method                 | Description                              |
+|------------------------|------------------------------------------|
+| `create(config)`       | Initialise storage and indexes           |
+| `drop()`               | Destroy all data                         |
+| `insert(fact)`         | Store a SemanticFact                     |
+| `update(id, fact)`     | Replace a fact                           |
+| `delete(id)`           | Remove a fact                            |
+| `query(query)`         | Execute a logical query                  |
+| `explain(query)`       | Return execution plan (no execution)     |
+| `statistics()`         | Return engine statistics                 |
+| `verify()`             | Run consistency checks                   |
+| `export(fmt)`          | Export all facts as bytes                |
+| `import_data(data, fmt)` | Import facts from bytes                |
 
 ## Query Pipeline
+
+The benchmarked path is simpler than the diagram below suggests: each
+engine's `query(query: Query)` method takes the typed `Query` object
+directly and dispatches to its own index structures — there is no
+generic string-parsing step on that path. `sfdb.query` (parser →
+`LogicalPlan` → cost-based optimiser → physical plan) is real code, but
+it is scaffolding not currently wired into either engine's benchmark
+path (see the README's note on `src/sfdb/query/`). The diagram below
+describes that scaffold, which a query-text surface (e.g. the
+SPARQL-like DSL) would need to route through if it were connected:
 
 ```
 User Query (string)

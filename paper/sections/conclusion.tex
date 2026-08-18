@@ -6,44 +6,78 @@ storage system for semantic facts. The system stores each fact atomically
 as a section over a finite context poset and answers entity-anchored
 queries through a stalk index that returns complete facts in a single hash
 lookup. A companion reified triple-store baseline is provided over the
-same canonical schema, and a mechanised proof of semantic equivalence
-binds the two engines together: every insert and every query is checked,
+same canonical schema, and a constructive semantic-equivalence proof
+binds the two engines together, checked at runtime by an automated harness:
+every insert and every query is checked,
 online, for canonical result equality.
 
-The evaluation, on four query classes and insert throughput at three
-scales, yields a clear result and a clear tradeoff. SFDB is faster on
-every measured dimension: inserts by $1.05$--$1.36\times$; entity-anchored
-LOOKUP queries by $23$--$32\times$ because the stalk index removes the need
-for triple reassembly; unrestricted GLOBAL queries by $44$--$95\times$ once
-that same flat index is used instead of enumerating topology open sets;
-bounded temporal-interval queries by $1.2$--$1.4\times$ via the
-engine's year-bucketed temporal index; and unbounded temporal-interval
-queries by $1.1$--$1.2\times$ via a second, flat,
-binary-searchable temporal index we added specifically because the
-bucketed index alone cannot narrow an open-ended range. The tradeoff that
-funds these advantages is memory: SFDB uses $1.3$--$2.5\times$ more
-resident memory per fact than the reified-triple baseline at the two
-larger scales measured. We report this
-plainly, and it is now the paper's only reported latency-independent
-tradeoff, following the fix described above. We also report four bugs and
-performance gaps found and fixed while preparing this evaluation, by three
-different means: the sheaf engine's LOOKUP path silently used
-neighbourhood (any-mention) rather than strict-subject match, caught by
-tightening the cross-engine verification harness itself
-(Section~\ref{sec:correctness}); the GLOBAL open-set enumeration
-inefficiency that produced an earlier draft's headline negative result was
-found by inspecting the code path, not by the harness, since both engines
-already agreed on results before the fix and disagreed only on speed
-(Section~\ref{sec:discussion:interpretation}); a linear-scan identifier
-decoder in the KG baseline, also found by inspection, which had been
-inflating the KG engine's own reconstruction cost; and the unbounded
-temporal-range degradation, found by the same code-inspection route as the
-GLOBAL fix and closed the same way, by adding an index the design already
-had room for rather than by redesigning around the limitation
-(Section~\ref{sec:discussion:temporal-unbounded}). We treat the fact that
-our own evaluation needed four rounds of correction, by three different
-mechanisms, as part of the paper's evidence for the value of that scrutiny
-rather than as an embarrassment to suppress.
+The evaluation, on five query classes and insert throughput at
+\benchscalecount{} scales up to $10^5$ facts, yields a decomposed result
+and a clear tradeoff. Against the write-through KG baseline, SFDB is
+faster on every query class measured at every scale: entity-anchored
+LOOKUP by \rangelookupkg{}, unrestricted GLOBAL
+queries by \rangeglobalkg{}, CONTEXT queries --- the class the design
+is named for --- by \rangecontextkg{}, and the two temporal-interval
+classes by
+\rangetemporalkg{} and \rangetemporalunbkg{}. Insert throughput does not
+share that pattern: SFDB is slower than KG at the smallest scale
+measured and faster at every larger one. The storage-layer control
+splits the query-class headline in two: the LOOKUP, GLOBAL, and CONTEXT
+advantages survive
+against the dict-indexed KG-mem control (\rangelookupkgmem{},
+\rangeglobalkgmem{}, and \rangecontextkgmem{}) and are properties of
+storing facts atomically
+under a context index, while the temporal margins do not survive at
+all --- SFDB is at parity or measurably slower than KG-mem on bounded
+TEMPORAL at three of four scales --- and are storage-layer effects,
+which we report as a negative result rather than reframe. Four
+external reference points anchor the comparison outside our own code:
+rdflib, on every query class with result
+counts verified, and --- the single highest-leverage gap this project's
+own reviewer simulation and roadmap identified --- three real, disk-backed
+production stores, Apache Jena TDB2, OpenLink Virtuoso, and Ontotext
+GraphDB, independently
+engineered by three different organisations and accessed over SPARQL/HTTP
+exactly as an external client would (Section~\ref{sec:eval:jena},
+Section~\ref{sec:eval:virtuoso}, Section~\ref{sec:eval:graphdb}). Against all three, SFDB
+remains faster on LOOKUP, GLOBAL, and CONTEXT at every scale, and is overtaken on
+TEMPORAL from $10^4$ facts onward: a genuine, scale-dependent
+crossover, not a clean win or a hedge, reproduced independently against
+three unrelated optimisers, and the first time this project has
+measured itself against production engines rather than only its own
+research prototypes. Two further comparisons push this further still,
+and not only in directions a tidier narrative would have chosen. A
+real-world case study
+(Section~\ref{sec:eval:wikidata}) against \wikidatanumfacts{} genuine
+Wikidata facts and the LUBM standard benchmark workload
+(Section~\ref{sec:eval:lubm}) up to \lubmlargescale{} facts both
+reproduce the LOOKUP/GLOBAL/CONTEXT
+finding cleanly, while TEMPORAL lands somewhere different each time ---
+beating both in-house baselines on Wikidata, roughly at parity with
+them on LUBM's largest scales --- evidence that TEMPORAL alone among
+the four query classes is genuinely sensitive to a dataset's actual
+shape. Building the LUBM comparison surfaced something larger than a
+data-shape finding: a genuine performance bug in SFDB's own CONTEXT
+query resolution, present for the entire evaluation and exposed only by
+a topology shape (many large, mutually unrelated top-level contexts)
+none of this paper's other datasets have, which required re-running and
+re-verifying every CONTEXT number this paper reports and retracting two
+earlier claims built on the unfixed numbers. We report the retraction
+alongside the fix rather than quietly substitute corrected numbers and
+leave the earlier narrative standing. The
+tradeoff that funds the surviving advantages is memory: SFDB uses
+\rangememkg{} more resident memory per fact than the reified-triple
+baseline, and \rangememkgmem{} more than the control. We report this
+plainly. We also report --- once, in
+full, in Section~\ref{sec:discussion:threats} --- that ten bugs,
+performance gaps, and measurement findings were surfaced while preparing this evaluation,
+by eight different mechanisms, only one of which was the automated
+verification harness catching itself. We treat the fact that our own
+evaluation needed ten rounds of correction --- one of them large enough
+to change the paper's own central crossover claim from two query
+classes to one --- as part of the paper's
+evidence for the value of that scrutiny rather than as an embarrassment
+to suppress.
 
 The formal apparatus in the paper is that of presheaves on a finite poset.
 We do not claim a novel sheaf-theoretic theorem: on the Alexandrov topology
@@ -55,10 +89,19 @@ implementation, and it gives us a canonical intermediate representation
 that makes cross-engine equivalence a checkable property rather than an
 aspiration.
 
-We do not claim that the design supplants production RDF stores. Our KG
-baseline is a controlled research implementation and the reported speedups
+We do not claim that the design supplants production RDF stores, and the
+Jena TDB2, Virtuoso, and GraphDB comparisons are direct evidence for
+why not: SFDB
+loses to all three on one of the five query classes measured once the
+working set is large enough. Our KG
+baseline remains a controlled research implementation, and the
+LOOKUP/GLOBAL/CONTEXT speedups against it in particular
 are best interpreted as a measurement of what disciplined context-indexed
 storage buys over a strict reification-plus-joins design at comparable
-engineering effort. Extending the evaluation to standard benchmarks and to
-production RDF endpoints is future work. The artifact and reproducibility
+engineering effort, now corroborated by three independent production-store
+results and the LUBM standard workload rather than merely asserted. Extending the evaluation to
+further
+standard benchmark workloads (LUBM at the much larger scales published
+LUBM results use, BSBM, WatDiv) remains future work, to check
+whether the crossover generalises further still. The artifact and reproducibility
 manifest for every result in the paper are released with the paper.

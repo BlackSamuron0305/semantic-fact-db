@@ -1,9 +1,11 @@
 """The paper's benchmark suite.
 
-Measures insert throughput and three query classes (LOOKUP, GLOBAL,
-TEMPORAL) against real KnowledgeGraphEngine and SheafDatabaseEngine
-instances at three scales, with cross-engine canonical-result
-verification on every query class at every scale. This is the single
+Measures insert throughput and five query classes (LOOKUP, GLOBAL,
+CONTEXT, bounded TEMPORAL, unbounded TEMPORAL) against real
+KnowledgeGraphEngine, the KG-mem storage-layer control, and
+SheafDatabaseEngine instances at four scales, with three-way
+cross-engine canonical-result verification on every query class at
+every scale. This is the single
 source of truth for the numbers reported in the paper's evaluation
 section — see paper/sections/artifact.tex for the reproduction command
 that invokes it (``sfdb benchmark``).
@@ -19,7 +21,7 @@ from typing import Any
 
 from common.interfaces import Query, QueryType
 from common.types import Identifier
-from sfdb.benchmark.engine_adapter import KGEngineAdapter, SheafEngineAdapter
+from sfdb.benchmark.engine_adapter import KGEngineAdapter, KGMemEngineAdapter, SheafEngineAdapter
 from sfdb.benchmark.metrics import MeasuredRun
 from sfdb.benchmark.outputs import BenchOutputRow, OutputWriter
 from sfdb.benchmark.reproducibility import ReproducibilityRecord
@@ -29,15 +31,27 @@ from sfdb.datasets.synthetic import SyntheticConfig, generate_facts
 
 log = logging.getLogger(__name__)
 
-PAPER_SCALES: tuple[int, ...] = (100, 1_000, 10_000)
+PAPER_SCALES: tuple[int, ...] = (100, 1_000, 10_000, 100_000)
 NUM_RUNS = 10
 WARM_UP = 2
-QUERY_CLASSES: tuple[str, ...] = ("LOOKUP", "GLOBAL", "TEMPORAL", "TEMPORAL_UNBOUNDED")
+QUERY_CLASSES: tuple[str, ...] = ("LOOKUP", "GLOBAL", "CONTEXT", "TEMPORAL", "TEMPORAL_UNBOUNDED")
 
 # entity_0 always carries the highest Zipf weight by construction
 # (see datasets.synthetic._zipf_weights), so it anchors a non-trivial
 # LOOKUP result set at every scale.
 ANCHOR_ENTITY = "entity_0"
+# A mid-depth internal context (depth 1 of the generator's default
+# context_depth=3, context_branching=2 tree — see
+# sfdb.datasets.synthetic.generate_contexts). This context and its
+# subtree together cover 7 of the 15 generated contexts (the "ctx.0"
+# branch plus "world" itself, out of "ctx.0"/"ctx.1"'s combined 14
+# tree contexts plus "world"), so a query anchored here returns a
+# genuine, non-trivial sub-tree rather than either a single leaf or
+# everything — the shape the paper's own motivating example describes
+# ("all facts that hold in the clinical.adult context"), and the one
+# query class no earlier revision of this suite measured despite being
+# the feature the context poset uniquely enables.
+CONTEXT_QUERY_ANCHOR = "ctx.0"
 # A bounded one-year window inside the generated temporal span
 # (_TEMPORAL_ORIGIN=2020-01-01, span=6 years), roughly centred so that
 # both early- and late-starting facts can overlap it.
@@ -47,9 +61,19 @@ TEMPORAL_QUERY_END = "2023"
 # the same 6-year span. SFDB resolves this via the flat, binary-searchable
 # start/end index (sfdb.sheaf.indexes.TemporalIndex.facts_ending_after)
 # instead of the year-bucket path used for the bounded case above.
-TEMPORAL_UNBOUNDED_QUERY_START = "2023"
+# NOTE: this must be a full ISO timestamp, not a bare year — both engines'
+# shared bare-year shorthand ("2023" with no end bound) silently re-bounds
+# the query to the single year [2023-01-01, 2024-01-01), which is exactly
+# the bounded shape this class exists to avoid. An earlier version of this
+# suite used "2023" here and therefore measured a re-bounded query while
+# describing it as unbounded; see the paper's discussion section.
+TEMPORAL_UNBOUNDED_QUERY_START = "2023-01-01T00:00:00+00:00"
 
-ENGINES: tuple[str, ...] = ("KnowledgeGraph", "SheafDatabase")
+# KnowledgeGraphMem is the storage-layer control: same reification and
+# query logic as KnowledgeGraph, with dict indexes in place of SQLite.
+# It separates "context-indexing vs reification" from "Python dicts vs
+# SQLite round-trips" in every reported comparison.
+ENGINES: tuple[str, ...] = ("KnowledgeGraph", "KnowledgeGraphMem", "SheafDatabase")
 
 
 def _canon_value(inner: Any) -> Any:
@@ -80,6 +104,8 @@ def _query_for_class(qclass: str, limit: int) -> Query:
         return Query(query_type=QueryType.LOOKUP, subject=Identifier(ANCHOR_ENTITY), limit=limit)
     if qclass == "GLOBAL":
         return Query(query_type=QueryType.GLOBAL, limit=limit)
+    if qclass == "CONTEXT":
+        return Query(query_type=QueryType.CONTEXT, context=CONTEXT_QUERY_ANCHOR, limit=limit)
     if qclass == "TEMPORAL":
         return Query(
             query_type=QueryType.TEMPORAL,
@@ -116,6 +142,8 @@ class ScaleResult:
 def _make_adapter(engine_name: str) -> KGEngineAdapter | SheafEngineAdapter:
     if engine_name == "KnowledgeGraph":
         return KGEngineAdapter()
+    if engine_name == "KnowledgeGraphMem":
+        return KGMemEngineAdapter()
     if engine_name == "SheafDatabase":
         return SheafEngineAdapter()
     raise ValueError(f"Unknown engine: {engine_name}")

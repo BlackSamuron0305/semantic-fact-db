@@ -55,19 +55,32 @@ Total: $O(|\mathcal{C}|)$ worst case.
 ### Context Lookup
 
 **KG:** Subject-predicate-object index scan.
-- Time: $O(\log T + n)$ where $n$ = facts matching the pattern.
+- Time: $O(\log T + n)$ where $n$ = facts matching the pattern. **Note
+  (2026-08-16):** the KG-mem storage-layer control variant is $O(n)$
+  instead, since it replaces the SQLite B-tree index with an unindexed
+  scan over the (small, fixed-size) set of distinct context strings.
 
-**Sheaf:** Direct open set lookup.
-- Time: $O(|\mathcal{C}| + n)$ to find the open set, then $O(n)$ to collect
-  sections. With a context-to-open-set index: $O(\log |\mathcal{C}| + n)$.
+**Sheaf (corrected 2026-08-16):** the topology registers every fact into
+the open set of its own context *and* every ancestor context's open set
+at insert time, so the open set named for the query's context already
+holds the full sub-tree union before the query runs — there is no
+descendant traversal at query time. Time: $O(1)$ dictionary lookup for
+the open set, then $O(n)$ to collect its members. (An earlier version of
+this note gave $O(|\mathcal{C}| + n)$ or $O(\log|\mathcal{C}| + n)$,
+implying a search over the context space at query time; that does not
+match `sfdb.sheaf.presheaf.Presheaf.sections_over()`, which is a direct
+`dict.get()`.)
 
 ### Restriction
 
-Given a fact $f$ with arity $k$ and contexts $c \leq d$:
-
-1. Filter object slots meaningful in $c$: $O(k)$.
-2. Specialize values: $O(k)$.
-Total: $O(k)$.
+**Corrected 2026-08-16:** restriction is *not* an $O(k)$ per-fact
+rewrite — see `research/proofs/restriction_maps.md` for the full
+correction. It is a single context-comparability check,
+$\operatorname{context}(f) \le c$, evaluated as a path-prefix comparison:
+$O(\min(\operatorname{depth}(f), \operatorname{depth}(c)))$, which is
+$O(1)$ for the bounded-depth context trees this design targets and
+independent of the fact's arity $k$. On success the fact is returned
+unmodified; no field is read or rewritten.
 
 This is independent of $N$: restriction operates on individual facts.
 
