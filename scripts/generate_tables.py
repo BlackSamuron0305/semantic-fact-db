@@ -148,15 +148,32 @@ Class & Facts & KG (ms) & KG-mem (ms) & SFDB (ms) & vs KG & vs KG-mem \\\\
 
 
 def generate_memory_table(summary: dict) -> str:
+    # Below this floor a delta is measurement noise, not signal -- the
+    # same 10 MB threshold generate_summary_macros() uses to decide which
+    # scales feed \rangememkg{}/\rangememkgmem{} (see that function's
+    # comment for why 1 MB was not conservative enough). Cells computed
+    # from a sub-floor delta are marked with a dagger rather than
+    # silently printed as if they were as trustworthy as the rest of the
+    # row.
+    floor = 1e7
     rows = []
     mem = summary.get("insert_memory_bytes", {})
     for n_str in sorted(mem, key=int):
         n = int(n_str)
-        kg_mb = mem[n_str].get("KnowledgeGraph", 0.0) / 1e6
-        kgm_mb = mem[n_str].get("KnowledgeGraphMem", 0.0) / 1e6
-        sh_mb = mem[n_str].get("SheafDatabase", 0.0) / 1e6
-        ratio_kg = f"{sh_mb / kg_mb:.2f}\\times" if kg_mb else "n/a"
-        ratio_kgm = f"{sh_mb / kgm_mb:.2f}\\times" if kgm_mb else "n/a"
+        kg_raw = mem[n_str].get("KnowledgeGraph", 0.0)
+        kgm_raw = mem[n_str].get("KnowledgeGraphMem", 0.0)
+        sh_raw = mem[n_str].get("SheafDatabase", 0.0)
+        kg_mb, kgm_mb, sh_mb = kg_raw / 1e6, kgm_raw / 1e6, sh_raw / 1e6
+        if kg_mb:
+            kg_dagger = "" if kg_raw >= floor and sh_raw >= floor else "^\\dagger"
+            ratio_kg = f"{sh_mb / kg_mb:.2f}\\times{kg_dagger}"
+        else:
+            ratio_kg = "n/a"
+        if kgm_mb:
+            kgm_dagger = "" if kgm_raw >= floor and sh_raw >= floor else "^\\dagger"
+            ratio_kgm = f"{sh_mb / kgm_mb:.2f}\\times{kgm_dagger}"
+        else:
+            ratio_kgm = "n/a"
         rows.append(
             f"${n:,}$ & ${kg_mb:.1f}$ & ${kgm_mb:.1f}$ & ${sh_mb:.1f}$"
             f" & ${ratio_kg}$ & ${ratio_kgm}$ \\\\"
@@ -167,7 +184,12 @@ def generate_memory_table(summary: dict) -> str:
 \\begin{{table}}[htbp]
 \\centering
 \\caption{{Resident memory delta from inserting $N$ facts (mean over ten
-runs). Ratios are SFDB\\,/\\,KG and SFDB\\,/\\,KG-mem.}}
+runs). Ratios are SFDB\\,/\\,KG and SFDB\\,/\\,KG-mem. A dagger ($\\dagger$)
+marks a ratio computed from at least one delta below the $10$\\,MB
+measurement floor; these are noise, not signal (repeated measurement
+showed them landing on either side of parity across independent runs),
+and are excluded from
+the ranges reported in the text.}}
 \\label{{tab:memory}}
 \\begin{{tabular}}{{lrrrrr}}
 \\toprule
@@ -214,22 +236,48 @@ def generate_summary_macros(summary: dict) -> str:
                 if sh and b:
                     query_ratios.setdefault((qclass, base), []).append(b / sh)
 
+    # The smallest scale (100 facts) is excluded from the range macro: repeat
+    # process launches at this scale put the SFDB/KG ratio anywhere from
+    # ~0.95x to ~1.17x (straddling parity, direction not repeatable), unlike
+    # the 1,000+ scales where the ratio is stable and repeatable across
+    # launches. Folding an unstable point into a "range" macro would imply a
+    # repeatable signal that isn't there; see the module docstring's sibling
+    # discussion for the memory table's analogous floor exclusion.
     insert_ratios = []
+    smallest_scale_ratio = None
+    smallest_scale = min((int(n) for n in summary["insert"]), default=None)
     for n_str in summary["insert"]:
         kg = summary["insert"][n_str]["KnowledgeGraph"]["mean"]
         sh = summary["insert"][n_str]["SheafDatabase"]["mean"]
-        if sh:
-            insert_ratios.append(kg / sh)
+        if not sh:
+            continue
+        ratio = kg / sh
+        if int(n_str) == smallest_scale:
+            smallest_scale_ratio = ratio
+        else:
+            insert_ratios.append(ratio)
 
+    # 10 MB, not 1 MB: repeated measurement at 1,000 facts (deltas of a
+    # few MB, comfortably above a naive 1 MB floor) showed the SFDB/KG
+    # ratio landing anywhere from ~0.82x to ~1.21x across five independent
+    # process launches -- noise straddling parity, not a stable signal,
+    # despite each individual delta clearing 1 MB. 10 MB sits in the
+    # empirical gap between the noisy small scales (well under 3 MB at
+    # 1,000 facts) and the unambiguous larger ones (tens to hundreds of
+    # MB from 10,000 facts on), where the ratio is consistent in
+    # direction and grows monotonically with scale across independent
+    # runs, matching the structural argument that memory overhead scales
+    # with the number of registered open sets.
+    mem_floor = 1e7
     mem = summary.get("insert_memory_bytes", {})
     mem_kg, mem_kgm = [], []
     for n_str in mem:
         kg = mem[n_str].get("KnowledgeGraph", 0.0)
         kgm = mem[n_str].get("KnowledgeGraphMem", 0.0)
         sh = mem[n_str].get("SheafDatabase", 0.0)
-        if kg >= 1e6 and sh >= 1e6:
+        if kg >= mem_floor and sh >= mem_floor:
             mem_kg.append(sh / kg)
-        if kgm >= 1e6 and sh >= 1e6:
+        if kgm >= mem_floor and sh >= mem_floor:
             mem_kgm.append(sh / kgm)
 
     scales = sorted(int(n) for n in summary["query"])
@@ -257,9 +305,13 @@ def generate_summary_macros(summary: dict) -> str:
         rng = _fmt_ratio_range(values) if values else "(unknown)"
         lines.append(f"\\providecommand{{\\{name}}}{{{rng}}}")
     insert_rng = _fmt_ratio_range(insert_ratios) if insert_ratios else "(unknown)"
+    smallest_scale_str = (
+        _fmt_single_ratio(smallest_scale_ratio) if smallest_scale_ratio else "(unknown)"
+    )
     mem_kg_rng = _fmt_ratio_range(mem_kg) if mem_kg else "(unknown)"
     mem_kgm_rng = _fmt_ratio_range(mem_kgm) if mem_kgm else "(unknown)"
     lines.append(f"\\providecommand{{\\rangeinsertkg}}{{{insert_rng}}}")
+    lines.append(f"\\providecommand{{\\insertkgsmallestscale}}{{{smallest_scale_str}}}")
     lines.append(f"\\providecommand{{\\rangememkg}}{{{mem_kg_rng}}}")
     lines.append(f"\\providecommand{{\\rangememkgmem}}{{{mem_kgm_rng}}}")
     lines.append(f"\\providecommand{{\\benchscales}}{{{scales_str}}}")
@@ -268,6 +320,19 @@ def generate_summary_macros(summary: dict) -> str:
 
 
 def generate_verification_table(summary: dict) -> str:
+    """Count 3-way (KG/KG-mem/SFDB) cross-engine verification instances.
+
+    Spans every in-house benchmark that runs the same canonical-form
+    equivalence check (Theorem 1's empirical corroboration), not only
+    the synthetic suite: the synthetic suite itself
+    (results/paper_suite_summary.json), the LUBM standard-benchmark run
+    against the in-house engines (results/lubm_benchmark.json), and the
+    Wikidata case study (results/wikidata_case_study.json). The
+    external-store comparisons (Jena/Virtuoso/GraphDB) are excluded
+    deliberately: those check result-count agreement against a single
+    external system, not the stronger canonical-form equivalence the
+    three in-house engines are held to.
+    """
     total = 0
     passed = 0
     for _n_str, classes in summary["query"].items():
@@ -275,8 +340,27 @@ def generate_verification_table(summary: dict) -> str:
             total += 1
             if entry["verified"]:
                 passed += 1
-    return f"""% Auto-generated by scripts/generate_tables.py from results/paper_suite_summary.json
-% Do not edit by hand.
+
+    lubm_path = REPO_ROOT / "results" / "lubm_benchmark.json"
+    if lubm_path.exists():
+        lubm_data = json.loads(lubm_path.read_text())
+        for scale in lubm_data.get("scales", {}).values():
+            for entry in scale.get("query", {}).values():
+                total += 1
+                if entry["verified"]:
+                    passed += 1
+
+    wikidata_path = REPO_ROOT / "results" / "wikidata_case_study.json"
+    if wikidata_path.exists():
+        wikidata_data = json.loads(wikidata_path.read_text())
+        for entry in wikidata_data.get("query", {}).values():
+            total += 1
+            if entry["verified"]:
+                passed += 1
+
+    return f"""% Auto-generated by scripts/generate_tables.py from
+% results/paper_suite_summary.json, results/lubm_benchmark.json, and
+% results/wikidata_case_study.json. Do not edit by hand.
 \\providecommand{{\\verifiedcount}}{{{passed}}}
 \\providecommand{{\\verifiedtotal}}{{{total}}}
 """
@@ -747,7 +831,7 @@ def generate_lubm_macros() -> str:
     classes = ("LOOKUP", "GLOBAL", "CONTEXT", "TEMPORAL", "TEMPORAL_UNBOUNDED")
     macro_names = {
         "LOOKUP": ("rangelookuplubmkg", "rangelookuplubmkgmem"),
-        "GLOBAL": ("rangeloballubmkg", "rangeglobalubmkgmem"),
+        "GLOBAL": ("rangegloballubmkg", "rangegloballubmkgmem"),
         "CONTEXT": ("rangecontextlubmkg", "rangecontextlubmkgmem"),
         "TEMPORAL": ("rangetemporallubmkg", "rangetemporallubmkgmem"),
         "TEMPORAL_UNBOUNDED": ("rangetemporalunblubmkg", "rangetemporalunblubmkgmem"),

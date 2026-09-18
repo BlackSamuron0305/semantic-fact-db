@@ -139,15 +139,21 @@ def generate_relations(config: SyntheticConfig, _rng: random.Random) -> list[Ide
 def generate_contexts(
     config: SyntheticConfig,
     rng: random.Random,
-    prefix: str = "ctx",
+    prefix: str = "world",
     depth: int = 0,
 ) -> list[Context]:
-    """Generate a tree of contexts recursively."""
+    """Generate a tree of contexts recursively, rooted at "world".
+
+    Every generated path is nested under "world." so that "world" is a
+    genuine prefix-ancestor of the whole tree (the root context ⊤ of
+    Definition (Context) in formal_definitions.tex), matching how the
+    LUBM and Wikidata generators already root their contexts.
+    """
     if depth >= config.context_depth:
         return []
     contexts: list[Context] = []
     for i in range(config.context_branching):
-        path = f"{prefix}.{i}" if prefix != "ctx" else f"ctx.{i}"
+        path = f"{prefix}.{i}"
         ctx = Context(path)
         contexts.append(ctx)
         contexts.extend(generate_contexts(config, rng, path, depth + 1))

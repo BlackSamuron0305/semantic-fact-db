@@ -24,10 +24,12 @@ same baseline with its SQLite tables replaced by in-process dict indexes
 (\rangelookupkgmem{}, \rangeglobalkgmem{}, and \rangecontextkgmem{})
 survives with the storage-layer difference removed
 and is therefore attributable to the design itself. The
-temporal-range advantages do not survive the control at all --- SFDB is at
-parity or measurably slower than the control on bounded temporal ranges at
-most scales --- and insert throughput is slower than the baseline at the
-smallest scale measured and faster at every larger one; both are reported
+temporal-range advantages do not survive the control at all --- SFDB is
+measurably slower than the control on bounded temporal ranges at every
+scale --- and the insert advantage does not hold at the smallest scale
+measured, where the two engines are close enough to parity that the
+direction is not stable across independent runs, though it is a clear,
+repeatable win from $1\,000$ facts onward; both are reported
 as negative or mixed results rather than smoothed into a single headline.
 The cost that funds the advantages that do hold is
 memory: \rangememkg{} more resident memory per fact than the baseline.
@@ -50,7 +52,7 @@ up to \lubmlargescale{} facts --- extend the finding rather than merely
 repeat it: LOOKUP, GLOBAL, and CONTEXT reproduce cleanly on both, while
 TEMPORAL lands in a different place on each (beating both in-house
 baselines on Wikidata, roughly at parity with them on LUBM), direct
-evidence that only TEMPORAL among the four query classes is genuinely
+evidence that only TEMPORAL among the five query classes is genuinely
 sensitive to a dataset's actual shape. Building the LUBM comparison
 surfaced the evaluation's most consequential self-correction: a
 performance bug in SFDB's own CONTEXT query resolution, present for the

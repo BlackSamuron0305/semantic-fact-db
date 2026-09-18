@@ -186,6 +186,42 @@ class TestDeepContexts:
         sheaf_c = sheaf_engine.query(q_child)
         assert _query_results_equal(kg_c, sheaf_c)
 
+    def test_synthetic_generator_world_is_true_root(
+        self, kg_engine: KnowledgeGraphEngine, sheaf_engine: SheafDatabaseEngine
+    ) -> None:
+        """CONTEXT(context="world") must return every fact on both engines.
+
+        Regression test for a real divergence: the synthetic generator
+        used to build its context tree under a bare "ctx" prefix (paths
+        like "ctx.0.1") and separately append a disconnected
+        Context("world") to the context pool, so "world" was not a
+        string-prefix-ancestor of the generated tree. The KG engine
+        special-cased context == "world" to mean "all events"
+        (sfdb.kg.engine, QueryType.CONTEXT handling), masking the gap,
+        while the sheaf engine's open-set registration
+        (SheafDatabaseEngine._assign_open_sets) only walks the literal
+        "."-separated prefix chain, so "context:world" held only the
+        handful of facts assigned exactly to the bare "world" entry --
+        provably diverging from the KG engine's "everything" answer.
+        Fixed by rooting the generator's tree at "world" itself
+        (sfdb.datasets.synthetic.generate_contexts), matching the LUBM
+        and Wikidata generators, so "world" is Definition (Context)'s
+        genuine top element ⊤ for every dataset this project ships.
+        """
+        from sfdb.datasets.synthetic import SyntheticConfig, generate_facts
+
+        dataset = generate_facts(SyntheticConfig(num_entities=20, num_facts=200, seed=7))
+        for fact in dataset.facts:
+            kg_engine.insert(fact)
+            sheaf_engine.insert(fact)
+
+        q = Query(query_type=QueryType.CONTEXT, context="world", limit=10_000)
+        kg_r = kg_engine.query(q)
+        sheaf_r = sheaf_engine.query(q)
+        assert len(kg_r.facts) == len(dataset.facts)
+        assert len(sheaf_r.facts) == len(dataset.facts)
+        assert _query_results_equal(kg_r, sheaf_r)
+
 
 # ---------------------------------------------------------------------------
 # 3. Temporal Queries

@@ -156,25 +156,26 @@ access path per query, on the premise that this would combine SFDB's
 LOOKUP advantage with a GLOBAL advantage that belonged to the KG baseline.
 That specific premise no longer holds: Section~\ref{sec:evaluation} reports SFDB
 faster than the KG baseline on GLOBAL as well as LOOKUP. The storage-layer
-control did surface a genuine case where the reified design wins: on
-bounded TEMPORAL, SFDB is measurably slower than the dict-indexed KG-mem
-control at every scale measured (\rangetemporalkgmem{},
-Section~\ref{sec:eval:control}), which is
-precisely the kind of gap that would motivate a second, reified access path
-for range-scan-heavy workloads. We still do not prioritise building it here,
-for a narrower reason than the earlier premise offered: the margin
-against KG-mem on bounded TEMPORAL narrows as scale grows rather than
-widening, from roughly two-and-a-half-fold at the smallest scale measured
-down to close to parity at the largest (\rangetemporalkgmem{}, a ratio
-below $1$ meaning SFDB is slower); the widest gap sits at sub-millisecond
-absolute latencies
-for both engines, the same measurement-floor regime
-Section~\ref{sec:eval:insert} already treats cautiously for insert timing.
+control did surface a case where a second, reified access path might
+help: on
+bounded TEMPORAL, the SFDB/KG-mem ratio straddles parity across scale
+rather than settling on either side of it (\rangetemporalkgmem{},
+Section~\ref{sec:eval:control}) --- a control that itself does not
+persist to disk sometimes beats SFDB and sometimes does not, with no
+consistent trend across scale that a hybrid design could reliably
+target. We do not prioritise building it here for exactly that reason:
+the case for a second representation would rest on beating a control
+by a margin large and consistent enough to be worth the engineering,
+and what we have instead is a ratio that crosses parity in both
+directions depending on scale, at absolute latencies in the low
+single-digit milliseconds where measurement noise is itself a live
+concern (Section~\ref{sec:eval:insert} treats the same regime cautiously
+for insert timing).
 SFDB also remains faster than the
 \emph{raw} KG baseline on every TEMPORAL row measured
 (Section~\ref{sec:eval:query}), so the case for a second representation
-would rest on beating a control that itself does not persist to disk,
-against a margin that is small where it is trustworthy. Doubling the memory cost
+would rest entirely on the unstable KG-mem margin, not on anything
+measured against a persisting store. Doubling the memory cost
 identified in Section~\ref{sec:eval:memory} --- the paper's central
 tradeoff --- to close a gap of that size is not an obviously good trade. A
 hybrid design remains worth revisiting if a real workload shows the gap

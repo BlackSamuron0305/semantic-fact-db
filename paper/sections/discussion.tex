@@ -10,18 +10,19 @@ KG baseline on every \emph{query} class measured, at every scale:
 \rangeglobalkg{} on GLOBAL, \rangecontextkg{} on CONTEXT,
 \rangetemporalkg{} on bounded TEMPORAL
 queries, and \rangetemporalunbkg{} on unbounded TEMPORAL queries. Insert
-throughput does not share that pattern: SFDB is slower than the KG
-baseline at the smallest scale measured and faster at every larger one
+throughput does not fully share that pattern: SFDB is a clear,
+repeatable win from $1\,000$ facts onward, but at the smallest scale
+measured the two engines are close enough to parity that the direction
+is not stable across independent runs
 (Section~\ref{sec:eval:insert}). The storage-layer control
 splits the query-class numbers into two different kinds of result: the LOOKUP,
 GLOBAL, and CONTEXT advantages survive against KG-mem (\rangelookupkgmem{},
 \rangeglobalkgmem{}, and \rangecontextkgmem{}) and are therefore properties
 of context-indexed
 atomic storage, while the temporal advantages do not survive at all ---
-SFDB is at parity or measurably slower than KG-mem on bounded TEMPORAL at
-three of four scales, and mixed on unbounded TEMPORAL
-(\rangetemporalkgmem{} and \rangetemporalunbkgmem{}, both ranges
-straddling parity) --- and are therefore
+on both bounded and unbounded TEMPORAL the SFDB/KG-mem ratio straddles
+parity across scale rather than settling on either side of it
+(\rangetemporalkgmem{} and \rangetemporalunbkgmem{}) --- and are therefore
 properties of answering queries without SQLite round trips --- something
 any engine can do, and the control does. CONTEXT is the query class the
 design is named for: both engines resolve it in time proportional to the
@@ -153,9 +154,9 @@ than inflating its advantage.
 The reified triple representation still wins in workloads that the SFDB
 design was not built for. Temporal-range scans are now, with the control
 in hand, the clearest example: once the storage layer is equalised,
-SFDB shows no consistent advantage on either TEMPORAL class and is
-measurably \emph{slower} than the dict-indexed control on bounded
-TEMPORAL at three of four scales
+SFDB shows no consistent advantage on either TEMPORAL class --- the
+SFDB/KG-mem ratio straddles parity across scale on both bounded and
+unbounded TEMPORAL rather than settling on either side of it
 (Section~\ref{sec:eval:control}), so a workload dominated by range scans
 over per-candidate filtering is better served by a reified design with a
 comparable index, not worse. The real Jena TDB2 comparison sharpens this
@@ -260,7 +261,7 @@ We identify four threats that a careful reader should weigh.
           tails, correlated structure, and adversarial cases that a
           controllable generator does not model by construction, and
           TEMPORAL landing in three different places across three
-          datasets is direct evidence that one of the four
+          datasets is direct evidence that one of the five
           margins this paper reports is genuinely sensitive to exactly
           that, in a way LOOKUP, GLOBAL, and CONTEXT are not. Building the
           LUBM comparison also surfaced finding ten (the bug inventory
@@ -284,8 +285,9 @@ We identify four threats that a careful reader should weigh.
           measured here are exhaustive. Unlike an earlier revision of this
           paper, we also do not claim that the KG baseline's scan-and-filter
           approach never wins: against the KG-mem storage-layer control,
-          bounded TEMPORAL is exactly such a case, with SFDB slower at three
-          of four scales (Section~\ref{sec:eval:control}).
+          bounded TEMPORAL is exactly such a case, with the SFDB/KG-mem
+          ratio straddling parity across scale rather than settling on
+          SFDB's side of it (Section~\ref{sec:eval:control}).
 
     \item[Scale.] All measurements are at $10^5$ facts or below. At the
           largest scale each fact expands to roughly $15$ reified triples
@@ -548,22 +550,23 @@ cheap to query.
 
 The second is new in this revision and comes directly from the
 storage-layer control: the TEMPORAL advantages over the SQLite baseline
-do not survive against KG-mem, and on bounded TEMPORAL the direction
-reverses at most scales --- SFDB is slower than the dict-indexed control
-at three of the four scales measured
-(\rangetemporalkgmem{} bounded, \rangetemporalunbkgmem{} unbounded, both
-ranges straddling parity).
+do not survive against KG-mem on either class --- on both bounded and
+unbounded TEMPORAL the SFDB/KG-mem ratio straddles parity across scale
+rather than settling on either side of it
+(\rangetemporalkgmem{} bounded, \rangetemporalunbkgmem{} unbounded).
 Context-indexed storage buys nothing measurable for range scans whose
-cost is dominated by per-candidate filtering, and on the bounded case
-costs a little; the earlier draft's
+cost is dominated by per-candidate filtering; the earlier draft's
 temporal ``wins'' were storage-layer effects. We consider surfacing this
 worth more than the wins it retracts: it is precisely the kind of
 finding the control exists to produce.
 
 The third, also new in this revision, is that insert throughput does not
 favour SFDB unconditionally: at the smallest scale measured ($100$
-facts) SFDB is $1.22\times$ \emph{slower} than the write-through KG
-baseline, and only becomes faster from $1\,000$ facts onward
+facts) the two engines are close enough to parity
+(\insertkgsmallestscale{} in the reported run) that the direction is
+not stable across independent process launches --- repeated launches of
+the identical measurement put the ratio on both sides of parity --- and
+SFDB only becomes a clear, repeatable win from $1\,000$ facts onward
 (Section~\ref{sec:eval:insert}). The fixed per-insert cost of registering
 a fact into eight to ten open sets does not amortise until the fact
 stream is large enough, which means the design's insert advantage is a

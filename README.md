@@ -24,7 +24,7 @@ to it on every query both engines can answer?
 # Install dependencies
 uv sync --group dev
 
-# Run tests (416 tests; 14 require a live Jena/Virtuoso/GraphDB instance
+# Run tests (417 tests; 14 require a live Jena/Virtuoso/GraphDB instance
 # and skip otherwise -- see docs/benchmarking.md)
 uv run pytest
 
@@ -95,7 +95,7 @@ semantic-fact-db/
 │       ├── datasets/     # Dataset generators (arity, Zipf skew, temporal)
 │       ├── visualization/ # Publication-quality plots
 │       └── cli.py        # Command-line interface
-├── tests/                # 416 unit tests
+├── tests/                # 417 unit tests
 ├── paper/                # LaTeX paper
 ├── research/             # Supporting proofs, notes, literature survey
 ├── docs/                 # Documentation

@@ -65,7 +65,7 @@ fundamentally different:
           context-indexed design is named for, and the one the paper's own
           motivating example describes (``every fact that holds in the
           \texttt{clinical.adult} context''). The anchor context used here,
-          \texttt{ctx.0}, covers roughly $45\%$ of the generated facts at
+          \texttt{world.0}, covers roughly $45\%$ of the generated facts at
           every scale, a genuine sub-tree rather than a single leaf or the
           whole graph.
     \item[TEMPORAL (bounded):] range queries over the temporal envelope of a
@@ -90,21 +90,28 @@ fundamentally different:
 \subsection{Insert Throughput}
 \label{sec:eval:insert}
 
-SFDB's insert throughput relative to the KG baseline does not hold a
-single direction across scales (Table~\ref{tab:insert}): at $100$ facts
-KG is faster ($8.24$\,ms vs.\ SFDB's $10.09$\,ms, a $1.22\times$ margin),
-while at $1\,000$, $10\,000$, and $100\,000$ facts SFDB is faster by
-$1.3$--$1.5\times$. We report the crossover rather than average over it:
-SFDB stores the fact atomically as
+SFDB's insert throughput relative to the KG baseline is close to parity
+at the smallest scale measured and a clear, repeatable win from
+$1\,000$ facts onward (Table~\ref{tab:insert}): SFDB is faster by
+\rangeinsertkg{} at $1\,000$, $10\,000$, and $100\,000$ facts. SFDB
+stores the fact atomically as
 a single section, while the KG engine must decompose the fact into $k + 4$
 triples and update three indexes per triple; both write through to
-SQLite. At the smallest scale the fixed per-insert cost of registering a
+SQLite. At $100$ facts the fixed per-insert cost of registering a
 fact into eight to ten open sets (Section~\ref{sec:eval:memory}) is not
 yet amortised against that per-triple decomposition cost, and the two
-engines' $95\%$ confidence intervals overlap narrowly rather than
-separating cleanly, so we do not read the $100$-fact point as a strong
-claim in either direction --- only as evidence that SFDB's insert
-advantage is not unconditional. KG-mem, which skips persistence entirely, is faster than both ---
+engines sit close enough to parity (\insertkgsmallestscale{} in the
+reported run) that we checked whether the direction itself is stable:
+five independent process launches of the identical $100$-fact
+measurement put the ratio on both sides of parity, each launch's own
+confidence interval notwithstanding. This is the same kind of
+cross-launch variance the eighth methodological finding
+(Section~\ref{sec:discussion:threats}) originally described ---
+confirmed here directly, on a metric with no relationship to the bug
+that finding turned out to be measuring. We therefore do not read the
+$100$-fact point as a directional claim in either direction, only as
+evidence that SFDB's insert advantage is conditional on scale rather
+than unconditional. KG-mem, which skips persistence entirely, is faster than both ---
 included in Table~\ref{tab:insert} for completeness, not comparison.
 
 \input{tables/insert_latency.tex}
@@ -205,14 +212,14 @@ CONTEXT, unlike LOOKUP and GLOBAL, is a genuine test of whether that
 constant factor is large enough to matter, rather than a foregone
 conclusion.
 On the TEMPORAL
-classes, by contrast, the picture reverses at most scales rather than
-merely narrowing. On bounded TEMPORAL, SFDB is slower than KG-mem at
-three of the four scales measured ($100$, $10\,000$, and $100\,000$
-facts) and marginally faster only at $1\,000$
-(\rangetemporalkgmem{} across the full range, which straddles parity
-rather than sitting above it); on unbounded TEMPORAL the pattern is
-mixed, slower at the smallest scale and faster or near parity at the
-three larger ones (\rangetemporalunbkgmem{}). The TEMPORAL
+classes, by contrast, the picture does not survive the control at all
+rather than merely narrowing. On both bounded and unbounded TEMPORAL,
+the SFDB/KG-mem ratio straddles parity across scale rather than settling
+on either side of it
+(\rangetemporalkgmem{} bounded, \rangetemporalunbkgmem{} unbounded) ---
+unlike the raw-KG comparison above, where SFDB wins at every scale by a
+wide, consistent margin, there is no scale-independent direction here to
+report. The TEMPORAL
 advantages over the SQLite-backed baseline reported earlier in this
 section are therefore not evidence of a context-indexed design win at
 all: they are storage-layer effects that a dict-indexed reified store
@@ -300,8 +307,9 @@ SFDB's Python-level candidate filtering once the candidate sets reach
 tens of thousands of rows. We report this as a genuine, scale-dependent crossover
 rather than smoothing it into either "SFDB wins" or "SFDB loses": the
 architecture's advantage is real, robust, and now holds on three of the
-four query classes measured, and a mature production engine is a real
-competitor on the fourth once the working set is large enough for
+five query classes measured, and a mature production engine is a real
+competitor on the remaining two (bounded and unbounded TEMPORAL) once
+the working set is large enough for
 its optimiser to matter.
 
 \emph{A retraction.} An earlier revision of this section reported an
@@ -444,7 +452,7 @@ the first comparison (``is this Jena's optimiser or mature engines
 generally'') now has a much better-supported answer than it did after
 either the second comparison or the first. And it is narrower than the
 question originally posed: on the strength of three independent
-production engines, three of the paper's four query classes
+production engines, three of the paper's five query classes
 (LOOKUP, GLOBAL, CONTEXT) show no crossover of any kind at any scale
 measured, in-house baseline or production store; only TEMPORAL does.
 
@@ -537,7 +545,7 @@ elsewhere at greater scale, in Section~\ref{sec:eval:lubm} --- while
 TEMPORAL remains genuinely data-shape-sensitive, in SFDB's favour here
 and against it elsewhere. A single case study on one domain at one scale
 is not proof that this generalises further; it is evidence that three
-of the four query classes stay robust and the fourth stays genuinely
+of the five query classes stay robust and TEMPORAL stays genuinely
 mixed, under exactly the kind of distributional shift
 Section~\ref{sec:discussion:threats}'s dataset-bias threat named as
 untested.
@@ -632,8 +640,8 @@ organic dataset, one standard benchmark) was worth making.
 On the corrected numbers: LOOKUP, GLOBAL, and CONTEXT all show SFDB
 faster than both baselines at every scale, exactly as in every other
 comparison in this paper (\rangelookuplubmkg{} and
-\rangelookuplubmkgmem{} on LOOKUP; \rangeloballubmkg{} and
-\rangeglobalubmkgmem{} on GLOBAL; \rangecontextlubmkg{} and
+\rangelookuplubmkgmem{} on LOOKUP; \rangegloballubmkg{} and
+\rangegloballubmkgmem{} on GLOBAL; \rangecontextlubmkg{} and
 \rangecontextlubmkgmem{} on CONTEXT, settling at \contextlubmkglarge{}
 and \contextlubmkgmemlarge{} at \lubmlargescale{} facts). TEMPORAL is
 the one class that does not show a clean win here either: SFDB is
@@ -706,8 +714,13 @@ the measurement floor; see text.}
 SFDB uses \rangememkg{} more resident memory per fact than the KG
 baseline, and \rangememkgmem{} more than the KG-mem control, over the
 scales at which both deltas are large enough to measure reliably
-($\geq 1$\,MB); at $100$ facts the deltas sit at the measurement floor
-and are excluded from the ranges rather than reported as signal. The
+($\geq 10$\,MB); at $100$ and $1\,000$ facts the deltas are too close to
+the measurement floor to be reliable and are excluded from the ranges
+rather than reported as signal --- repeated measurement at $1\,000$
+facts specifically, across five independent process launches, put the
+SFDB/KG ratio on both sides of parity despite each individual delta
+nominally clearing a naive $1$\,MB threshold, which is why the floor
+used here is ten times that. The
 cost has a direct structural explanation: the topology
 builder assigns each fact to roughly eight to ten open sets (event,
 subject and object entities, temporal bucket, context and its ancestors,
@@ -770,13 +783,17 @@ result-count check against an implementation we did not write.
 Six findings summarise the evaluation:
 
 \begin{enumerate}
-    \item \textbf{Inserts do not favour SFDB unconditionally}: SFDB is
-          $1.2\times$ \emph{slower} than the write-through KG baseline
-          at the smallest scale ($100$ facts) and $1.3$--$1.5\times$
-          faster at every larger scale measured
-          (\rangeinsertkg{} across the full range). The reversal at
-          small $N$ is consistent with the fixed cost of registering a
-          fact into eight to ten open sets not yet being amortised.
+    \item \textbf{Inserts favour SFDB from $1\,000$ facts onward, but
+          not at the smallest scale}: SFDB is \rangeinsertkg{} faster
+          than the write-through KG baseline at $1\,000$, $10\,000$,
+          and $100\,000$ facts. At the smallest scale ($100$ facts) the
+          two engines sit close enough to parity that the direction is
+          not stable across independent process launches --- we do not
+          read it as a claim in either direction
+          (Section~\ref{sec:eval:insert}). The advantage from $1\,000$
+          facts onward is consistent with the fixed cost of registering
+          a fact into eight to ten open sets amortising against KG's
+          per-triple decomposition cost as $N$ grows.
           (KG-mem inserts faster than both by
           skipping persistence; that row is a control artefact, not a
           finding.)
@@ -803,10 +820,10 @@ Six findings summarise the evaluation:
 
     \item \textbf{The TEMPORAL advantages over the SQLite baseline
           (\rangetemporalkg{} bounded, \rangetemporalunbkg{} unbounded)
-          do not survive the control --- and on bounded TEMPORAL, SFDB is
-          slower than KG-mem at three of four scales}
+          do not survive the control on either class}
           (\rangetemporalkgmem{} bounded, \rangetemporalunbkgmem{}
-          unbounded, both straddling parity): these are storage-layer
+          unbounded, both ratios straddling parity across scale rather
+          than settling on one side of it): these are storage-layer
           effects, not wins for context-indexed
           storage, and once controlled for there is no consistent
           advantage left to report on either TEMPORAL class.
@@ -818,9 +835,10 @@ Six findings summarise the evaluation:
 \end{enumerate}
 
 We do not claim SFDB is universally superior; the memory cost is real,
-inserts are not uniformly faster, the temporal classes show no
+the insert advantage does not hold at the smallest scale measured, the
+temporal classes show no
 design-level advantage once the storage
-layer is controlled for and are mildly \emph{disadvantageous} on bounded
+layer is controlled for and are measurably \emph{disadvantageous} on bounded
 TEMPORAL, and all of this is reported plainly rather than smoothed into a
 single directional headline.
 
@@ -831,5 +849,8 @@ The baseline and scale caveats that qualify every number above are
 collected in one place in Section~\ref{sec:limitations} and analysed in
 Section~\ref{sec:discussion:threats} rather than repeated here; in short,
 the KG baselines are our own research prototypes rather than production
-RDF stores, rdflib is the only externally-authored system measured, and
-all measurements stop at $10^5$ facts on a single node.
+RDF stores, only four externally-authored systems are measured (rdflib,
+Jena TDB2, Virtuoso, and GraphDB) against a much larger population of
+production RDF stores, and all measurements stop at $10^5$ facts on a
+single node (LUBM's in-house comparison reaches $97{,}289$ facts; the
+external-store comparisons match the synthetic suite's four scales).

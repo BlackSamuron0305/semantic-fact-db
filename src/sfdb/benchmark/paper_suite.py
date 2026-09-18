@@ -41,17 +41,18 @@ QUERY_CLASSES: tuple[str, ...] = ("LOOKUP", "GLOBAL", "CONTEXT", "TEMPORAL", "TE
 # LOOKUP result set at every scale.
 ANCHOR_ENTITY = "entity_0"
 # A mid-depth internal context (depth 1 of the generator's default
-# context_depth=3, context_branching=2 tree — see
+# context_depth=3, context_branching=2 tree, rooted at "world" — see
 # sfdb.datasets.synthetic.generate_contexts). This context and its
-# subtree together cover 7 of the 15 generated contexts (the "ctx.0"
-# branch plus "world" itself, out of "ctx.0"/"ctx.1"'s combined 14
-# tree contexts plus "world"), so a query anchored here returns a
-# genuine, non-trivial sub-tree rather than either a single leaf or
-# everything — the shape the paper's own motivating example describes
-# ("all facts that hold in the clinical.adult context"), and the one
-# query class no earlier revision of this suite measured despite being
-# the feature the context poset uniquely enables.
-CONTEXT_QUERY_ANCHOR = "ctx.0"
+# subtree together cover 7 of the 15 generated contexts (its own
+# branch's 7, out of 14 tree contexts split evenly across "world.0" and
+# "world.1", plus the standalone root "world" itself), so a query
+# anchored here returns a genuine, non-trivial sub-tree rather than
+# either a single leaf or everything — the shape the paper's own
+# motivating example describes ("all facts that hold in the
+# clinical.adult context"), and the one query class no earlier revision
+# of this suite measured despite being the feature the context poset
+# uniquely enables.
+CONTEXT_QUERY_ANCHOR = "world.0"
 # A bounded one-year window inside the generated temporal span
 # (_TEMPORAL_ORIGIN=2020-01-01, span=6 years), roughly centred so that
 # both early- and late-starting facts can overlap it.

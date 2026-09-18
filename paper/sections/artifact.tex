@@ -67,7 +67,7 @@ java -jar fuseki-server.jar --loc=./tdb2data --update --port 3030 /sfdb &
 
 # Then, from the repository root:
 uv run python scripts/jena_reference.py    # populates results/
-uv run python scripts/lubm_external_reference.py --store jena  # LUBM vs. Jena
+uv run python scripts/lubm_external_reference.py --store jena
 uv run python scripts/generate_tables.py   # regenerates jena tables too
 \end{verbatim}
 
@@ -83,7 +83,7 @@ docker run -d --name virtuoso-sfdb -p 8890:8890 -p 1111:1111 \
 
 # Then, from the repository root:
 uv run python scripts/virtuoso_reference.py  # populates results/
-uv run python scripts/lubm_external_reference.py --store virtuoso  # LUBM vs. Virtuoso
+uv run python scripts/lubm_external_reference.py --store virtuoso
 uv run python scripts/generate_tables.py     # regenerates virtuoso tables too
 \end{verbatim}
 
@@ -98,7 +98,7 @@ docker run -d --name graphdb-sfdb -p 7200:7200 ontotext/graphdb:10.7.3
 
 # Then, from the repository root (auto-creates its repository):
 uv run python scripts/graphdb_reference.py   # populates results/
-uv run python scripts/lubm_external_reference.py --store graphdb  # LUBM vs. GraphDB
+uv run python scripts/lubm_external_reference.py --store graphdb
 uv run python scripts/generate_tables.py     # regenerates graphdb tables too
 \end{verbatim}
 

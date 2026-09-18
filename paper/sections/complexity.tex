@@ -206,12 +206,13 @@ These bounds are tested empirically by the benchmark framework
 
 \begin{enumerate}
     \item SFDB insertion is typically $O(d)$ vs.\ KG's $O(k \log T)$ for contexts
-          of depth $d$; empirically the two bounds trade places at small
-          $N$ rather than one dominating throughout (\rangeinsertkg{}
-          across the scales measured, with SFDB slower at the smallest
-          scale) --- consistent with a fixed per-insert overhead in the
+          of depth $d$; empirically SFDB is faster from $N=1\,000$
+          onward (\rangeinsertkg{}), but at $N=100$ the two bounds'
+          constants are close enough that the empirical ordering is not
+          stable across independent runs --- consistent with a fixed
+          per-insert overhead in the
           open-set registration step that has not yet been amortised
-          against KG's per-triple decomposition cost at $N=100$.
+          against KG's per-triple decomposition cost.
     \item SFDB LOOKUP queries are faster than KG's reified-triple
           reconstruction at every scale measured (\rangelookupkg{} across
           $10^2$--$10^5$ facts, and \rangelookupkgmem{} against the
@@ -240,9 +241,10 @@ These bounds are tested empirically by the benchmark framework
           (\rangetemporalunbkg{}, via the flat binary-searchable index
           added specifically for this case), as the $O(y \cdot n_y)$ and
           $O(\log M + n)$ bounds above predict --- but the storage-layer
-          control shows these margins do not survive at all: SFDB is at
-          parity or slower than KG-mem on bounded TEMPORAL at three of
-          four scales, so the bound is not the source of the SQLite-baseline
+          control shows these margins do not survive at all: the SFDB/KG-mem
+          ratio on bounded TEMPORAL straddles parity across scale rather
+          than settling on either side of it, so the bound is not the
+          source of the SQLite-baseline
           margin
           (Section~\ref{sec:eval:control}). This also reverses what an
           earlier implementation measured on unbounded ranges, as

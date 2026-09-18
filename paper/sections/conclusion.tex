@@ -20,16 +20,18 @@ queries by \rangeglobalkg{}, CONTEXT queries --- the class the design
 is named for --- by \rangecontextkg{}, and the two temporal-interval
 classes by
 \rangetemporalkg{} and \rangetemporalunbkg{}. Insert throughput does not
-share that pattern: SFDB is slower than KG at the smallest scale
-measured and faster at every larger one. The storage-layer control
+fully
+share that pattern: SFDB is a clear, repeatable win from $1\,000$ facts
+onward, but at the smallest scale measured the direction is not stable
+across independent runs. The storage-layer control
 splits the query-class headline in two: the LOOKUP, GLOBAL, and CONTEXT
 advantages survive
 against the dict-indexed KG-mem control (\rangelookupkgmem{},
 \rangeglobalkgmem{}, and \rangecontextkgmem{}) and are properties of
 storing facts atomically
 under a context index, while the temporal margins do not survive at
-all --- SFDB is at parity or measurably slower than KG-mem on bounded
-TEMPORAL at three of four scales --- and are storage-layer effects,
+all --- on both TEMPORAL classes the SFDB/KG-mem ratio straddles
+parity across scale rather than settling on either side of it --- and are storage-layer effects,
 which we report as a negative result rather than reframe. Four
 external reference points anchor the comparison outside our own code:
 rdflib, on every query class with result
@@ -55,7 +57,7 @@ reproduce the LOOKUP/GLOBAL/CONTEXT
 finding cleanly, while TEMPORAL lands somewhere different each time ---
 beating both in-house baselines on Wikidata, roughly at parity with
 them on LUBM's largest scales --- evidence that TEMPORAL alone among
-the four query classes is genuinely sensitive to a dataset's actual
+the five query classes is genuinely sensitive to a dataset's actual
 shape. Building the LUBM comparison surfaced something larger than a
 data-shape finding: a genuine performance bug in SFDB's own CONTEXT
 query resolution, present for the entire evaluation and exposed only by
